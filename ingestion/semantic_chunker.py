@@ -1,16 +1,23 @@
-from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.docstore.document import Document
+from langchain.text_splitter import RecursiveCharacterTextSplitter
 
-def semantic_chunk_documents(text):
+def semantic_chunk_documents(text, metadata):
 
     splitter = RecursiveCharacterTextSplitter(
         chunk_size=800,
-        chunk_overlap=100,
-        separators=["\n\n", "\n", ".", " "]
+        chunk_overlap=100
     )
 
     chunks = splitter.split_text(text)
 
-    documents = [Document(page_content=chunk) for chunk in chunks]
+    documents = []
+
+    for chunk in chunks:
+        documents.append(
+            Document(
+                page_content=chunk,
+                metadata=metadata
+            )
+        )
 
     return documents
