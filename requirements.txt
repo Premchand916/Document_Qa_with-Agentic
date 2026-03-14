@@ -1,0 +1,10 @@
+langgraph
+langchain
+langchain-google-genai
+faiss-cpu
+streamlit
+pandas
+pdfplumber
+python-pptx
+openpyxl
+python-dotenv
