@@ -1,29 +1,25 @@
-from agents.intent_classifier import classify_intent
-from agents.qa_agent import run_document_qa, run_unsupported_intent
-from langgraph.graph import END, StateGraph
-from langgraph_flow.router import route_intent
-from langgraph_flow.state import AgentState
+from langgraph.graph import StateGraph, END
+
+from agents.planner_agent import planner_agent
+from agents.retriever_agent import retriever_agent
+from agents.qa_agent import qa_agent
+from agents.writer_agent import writer_agent
 
 
 def build_graph():
 
-    workflow = StateGraph(AgentState)
+    workflow = StateGraph(dict)
 
-    workflow.add_node("intent_classifier", classify_intent)
-    workflow.add_node("qa_agent", run_document_qa)
-    workflow.add_node("unsupported_intent", run_unsupported_intent)
+    workflow.add_node("planner", planner_agent)
+    workflow.add_node("retriever", retriever_agent)
+    workflow.add_node("qa_agent", qa_agent)
+    workflow.add_node("writer", writer_agent)
 
-    workflow.set_entry_point("intent_classifier")
+    workflow.set_entry_point("planner")
 
-    workflow.add_conditional_edges(
-        "intent_classifier",
-        route_intent,
-        {
-            "qa_agent": "qa_agent",
-            "unsupported_intent": "unsupported_intent"
-        }
-    )
-    workflow.add_edge("qa_agent", END)
-    workflow.add_edge("unsupported_intent", END)
+    workflow.add_edge("planner", "retriever")
+    workflow.add_edge("retriever", "qa_agent")
+    workflow.add_edge("qa_agent", "writer")
+    workflow.add_edge("writer", END)
 
     return workflow.compile()
