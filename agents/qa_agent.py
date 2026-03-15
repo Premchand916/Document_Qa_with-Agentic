@@ -34,7 +34,7 @@ def run_document_qa(state):
 
     content = response.content
 
-    if isinstance(content, list):
+    if isinstance(content, list): 
         content = " ".join(str(x) for x in content)
 
     state["response"] = str(content).strip()
