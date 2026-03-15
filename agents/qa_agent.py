@@ -5,10 +5,21 @@ from tools.vector_search_tool import search_documents
 def run_document_qa(state):
 
     query = state["query"]
-    context = state["documents"]
+    docs = state.get("documents", [])
+
+    if not docs:
+        state["response"] = "No relevant information found in the documents."
+        return state
+
+    context = "\n\n".join(
+        doc.page_content if hasattr(doc, "page_content") else str(doc)
+        for doc in docs
+    )
 
     prompt = f"""
-    Answer the question using the provided context.
+    You are a document analysis assistant.
+
+    Use ONLY the provided context to answer the question.
 
     Context:
     {context}
@@ -23,7 +34,6 @@ def run_document_qa(state):
 
     content = response.content
 
-    # Gemini sometimes returns list instead of string
     if isinstance(content, list):
         content = " ".join(str(x) for x in content)
 
