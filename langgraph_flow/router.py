@@ -1,15 +1,8 @@
 def route_intent(state):
 
-    intent = state["intent"]
+    intent = state.get("intent", "document_qa")
 
-    if intent == "document_qa":
-        return "qa_agent"
+    if intent == "data_analysis":
+        return "unsupported_intent"
 
-    elif intent == "data_analysis":
-        return "analysis_agent"
-
-    elif intent == "summarization":
-        return "summarizer_agent"
-
-    elif intent == "document_comparison":
-        return "comparison_agent"
+    return "qa_agent"

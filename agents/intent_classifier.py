@@ -1,29 +1,59 @@
-from langchain_google_genai import ChatGoogleGenerativeAI
+from agents.orchestrator_agent import create_orchestrator
 
-llm = ChatGoogleGenerativeAI(
-    model="gemini-3.1-pro-preview",
-    temperature=0
-)
+ALLOWED_INTENTS = {
+    "document_qa",
+    "data_analysis",
+    "summarization",
+    "document_comparison",
+}
+
+
+def _heuristic_intent(query):
+    query_lower = query.lower()
+
+    if any(keyword in query_lower for keyword in ("summarize", "summarise", "summary")):
+        return "summarization"
+
+    if any(keyword in query_lower for keyword in ("compare", "comparison", "difference", "versus", "vs")):
+        return "document_comparison"
+
+    if any(
+        keyword in query_lower
+        for keyword in ("excel", "csv", "spreadsheet", "data", "chart", "plot", "sum", "average", "max", "min")
+    ):
+        return "data_analysis"
+
+    return "document_qa"
+
 
 def classify_intent(state):
-
     query = state["query"]
+    prompt = (
+        "You are an intent router.\n"
+        "Choose exactly one label from:\n"
+        "document_qa\n"
+        "data_analysis\n"
+        "summarization\n"
+        "document_comparison\n"
+        f"Query: {query}\n"
+        "Answer with only the label."
+    )
 
-    prompt = f"""
-    Classify the user query into one of these intents:
+    try:
+        llm = create_orchestrator()
+        response = llm.invoke(prompt)
+        content = response.content
 
-    1. document_qa
-    2. data_analysis
-    3. summarization
-    4. document_comparison
+        if isinstance(content, list):
+            content = content[0]
 
-    Query: {query}
+        intent = str(content).strip().lower()
+    except Exception:
+        intent = _heuristic_intent(query)
 
-    Only return the intent name.
-    """
+    if intent not in ALLOWED_INTENTS:
+        intent = _heuristic_intent(query)
 
-    response = llm.invoke(prompt)
-
-    state["intent"] = response.content.strip()
+    state["intent"] = intent
 
     return state

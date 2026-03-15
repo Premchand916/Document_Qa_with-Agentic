@@ -1,5 +1,6 @@
 langgraph
 langchain
+langchain-community
 langchain-google-genai
 faiss-cpu
 streamlit
@@ -8,3 +9,5 @@ pdfplumber
 python-pptx
 openpyxl
 python-dotenv
+sentence-transformers
+langchain-huggingface
