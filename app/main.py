@@ -13,6 +13,7 @@ from ingestion.semantic_chunker import semantic_chunk_documents
 from langgraph_flow.graph_builder import build_graph
 from vector_store.faiss_store import create_vector_store, load_vector_store
 
+
 st.set_page_config(page_title="Document Intelligence Agent", layout="wide")
 
 st.title("Document Intelligence Agent (LangGraph + RAG)")

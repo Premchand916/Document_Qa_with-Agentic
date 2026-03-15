@@ -1,25 +1,20 @@
 from agents.orchestrator_agent import create_orchestrator
 from tools.vector_search_tool import search_documents
-
+from tools.retriever_tool import retrieve_documents
 
 def run_document_qa(state):
 
     query = state["query"]
-    docs = state.get("documents", [])
+    vectorstore = state["vectorstore"]
 
-    if not docs:
-        state["response"] = "No relevant information found in the documents."
+    context = retrieve_documents(query, vectorstore)
+
+    if not context:
+        state["response"] = "No relevant information found."
         return state
 
-    context = "\n\n".join(
-        doc.page_content if hasattr(doc, "page_content") else str(doc)
-        for doc in docs
-    )
-
     prompt = f"""
-    You are a document analysis assistant.
-
-    Use ONLY the provided context to answer the question.
+    Answer the question using the provided context.
 
     Context:
     {context}
@@ -34,7 +29,7 @@ def run_document_qa(state):
 
     content = response.content
 
-    if isinstance(content, list): 
+    if isinstance(content, list):
         content = " ".join(str(x) for x in content)
 
     state["response"] = str(content).strip()
