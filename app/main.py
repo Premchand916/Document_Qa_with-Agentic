@@ -18,12 +18,12 @@ st.set_page_config(page_title="Document Intelligence Agent", layout="wide")
 
 st.title("Document Intelligence Agent (LangGraph + RAG)")
 
-# Build LangGraph workflow
-graph = build_graph()
+# -----------------------------
+# Initialize Session State
+# -----------------------------
 
-# Initialize session states
-if "messages" not in st.session_state:
-    st.session_state.messages = []
+if "chat_history" not in st.session_state:
+    st.session_state.chat_history = []
 
 if "vectorstore" not in st.session_state:
     try:
@@ -37,6 +37,13 @@ if "last_result" not in st.session_state:
 
 if "startup_error" in st.session_state:
     st.sidebar.error(st.session_state["startup_error"])
+
+
+# -----------------------------
+# Build LangGraph Workflow
+# -----------------------------
+
+graph = build_graph()
 
 
 # -----------------------------
@@ -55,30 +62,22 @@ if uploaded_files:
 
     all_docs = []
 
-    for file in uploaded_files:
+    for uploaded_file in uploaded_files:
 
-        with st.spinner(f"Processing {file.name}..."):
+        documents = load_pdf(uploaded_file)
 
-            text = load_pdf(file)
+        docs = semantic_chunk_documents(documents)
 
-            metadata = {
-                "document_name": file.name,
-                "document_type": "pdf"
-            }
-
-            docs = semantic_chunk_documents(text, metadata)
-
-            all_docs.extend(docs)
+        all_docs.extend(docs)
 
     try:
         vectorstore = create_vector_store(all_docs)
+        st.session_state.vectorstore = vectorstore
+        st.sidebar.success("Documents embedded and saved to FAISS DB")
+
     except Exception as exc:
         st.sidebar.error(str(exc))
         st.stop()
-
-    st.session_state.vectorstore = vectorstore
-
-    st.sidebar.success("Documents embedded and saved to FAISS DB")
 
 
 # -----------------------------
@@ -87,46 +86,53 @@ if uploaded_files:
 
 st.subheader("Chat with your documents")
 
-for message in st.session_state.messages:
-    with st.chat_message(message["role"]):
-        st.write(message["content"])
+# Display previous chat messages
+for msg in st.session_state.chat_history:
+
+    with st.chat_message(msg["role"]):
+        st.write(msg["content"])
 
 
-user_input = st.chat_input("Ask a question about your uploaded documents")
+# Chat input (ONLY ONE INSTANCE)
+query = st.chat_input(
+    "Ask a question about your uploaded documents",
+    key="document_chat_input"
+)
 
-if user_input:
 
-    if st.session_state.vectorstore is None:
-        st.warning("Please upload documents first.")
-        st.stop()
+if query:
 
     # Save user message
-    st.session_state.messages.append({
-        "role": "user",
-        "content": user_input
-    })
+    st.session_state.chat_history.append(
+        {"role": "user", "content": query}
+    )
 
     with st.chat_message("user"):
-        st.write(user_input)
+        st.write(query)
 
-    # Prepare state for agent
-    state = {
-        "query": user_input,
-        "vectorstore": st.session_state.vectorstore
-    }
+    if st.session_state.vectorstore is None:
 
-    with st.spinner("Agent is thinking..."):
+        response = "Please upload documents first."
+        st.warning(response)
 
-        result = graph.invoke(state)
+    else:
 
-        response = result.get("response", "No response generated.")
+        state = {
+            "query": query,
+            "vectorstore": st.session_state.vectorstore,
+            "chat_history": st.session_state.chat_history
+        }
+
+        with st.spinner("Agent is thinking..."):
+            result = graph.invoke(state)
+
+        response = result.get("response", "")
         st.session_state.last_result = result
 
     # Save assistant response
-    st.session_state.messages.append({
-        "role": "assistant",
-        "content": response
-    })
+    st.session_state.chat_history.append(
+        {"role": "assistant", "content": response}
+    )
 
     with st.chat_message("assistant"):
         st.write(response)
@@ -134,8 +140,9 @@ if user_input:
 
 result = st.session_state.last_result
 
+
 # -----------------------------
-# Reasoning Trace
+# Agent Reasoning Trace
 # -----------------------------
 
 if "thoughts" in result:
