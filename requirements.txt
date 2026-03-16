@@ -11,3 +11,4 @@ openpyxl
 python-dotenv
 sentence-transformers
 langchain-huggingface
+rank-bm25
