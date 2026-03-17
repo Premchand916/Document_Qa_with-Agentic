@@ -1,4 +1,5 @@
 from pathlib import Path
+import streamlit as st
 
 from embeddings.Hugging_face_embedding import get_embedding_model
 
@@ -16,6 +17,7 @@ def _get_faiss_class():
 
     return FAISS
 
+
 def create_vector_store(documents):
     FAISS = _get_faiss_class()
 
@@ -26,21 +28,27 @@ def create_vector_store(documents):
         embedding_model
     )
 
-    # Save index to disk
+    # Ensure DB folder exists
+    DB_PATH.mkdir(parents=True, exist_ok=True)
+
+    # Save index
     vectorstore.save_local(str(DB_PATH))
 
     return vectorstore
 
 
+@st.cache_resource
 def load_vector_store():
     if not DB_PATH.exists():
         return None
 
     FAISS = _get_faiss_class()
     embedding_model = get_embedding_model()
+
     vectorstore = FAISS.load_local(
         str(DB_PATH),
         embedding_model,
         allow_dangerous_deserialization=True
     )
+
     return vectorstore

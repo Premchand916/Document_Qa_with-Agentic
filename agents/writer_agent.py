@@ -1,11 +1,21 @@
 def writer_agent(state):
 
-    draft = state.get("draft_answer", "")
+    answer = state.get("draft_answer", "")
+    sources = state.get("sources", [])
 
-    if not draft:
+    if not answer:
         state["response"] = "Unable to generate answer."
         return state
 
-    state["response"] = draft.strip()
+    formatted_sources = "\n".join(
+        f"- {src}" for src in sources
+    )
+
+    state["response"] = f"""
+{answer}
+
+Sources:
+{formatted_sources}
+"""
 
     return state

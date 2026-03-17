@@ -1,14 +1,26 @@
+from langchain_core.documents import Document
 import pdfplumber
 
 
 def load_pdf(file):
-    """Load text from a PDF file.
 
-    Supports file-like objects (e.g., Streamlit `UploadedFile`) and file paths.
-    """
+    documents = []
 
-    # pdfplumber supports file-like objects, including BytesIO from Streamlit.
     with pdfplumber.open(file) as pdf:
-        pages = [page.extract_text() or "" for page in pdf.pages]
 
-    return "\n\n".join(pages)
+        for page_num, page in enumerate(pdf.pages):
+
+            text = page.extract_text()
+
+            if text:
+                documents.append(
+                    Document(
+                        page_content=text,
+                        metadata={
+                            "source": file.name,
+                            "page": page_num + 1
+                        }
+                    )
+                )
+
+    return documents
