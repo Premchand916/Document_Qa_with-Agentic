@@ -14,6 +14,16 @@ def qa_agent(state):
     query = state["query"]
     docs = state.get("documents", [])
 
+    if docs:
+        best_doc = docs[0]
+
+        source = best_doc.metadata.get("source", "Unknown")
+        page = best_doc.metadata.get("page", "N/A")
+
+        state["source"] = f"{source} (page {page})"
+    else:
+        state["source"] = "No source"
+
     if not docs:
         state["draft_answer"] = "No relevant information found."
         return state

@@ -48,7 +48,7 @@ def retriever_agent(state):
     # ---------------------
     # 🔥 Re-ranking (NEW)
     # ---------------------
-    final_docs = rerank_documents(query, merged_docs, top_k=3)
+    final_docs = rerank_documents(query, merged_docs[:6], top_k=2)
 
     state["documents"] = final_docs
 

@@ -1,24 +1,38 @@
+import os
+from functools import lru_cache
+from pathlib import Path
+
 from sentence_transformers import CrossEncoder
 
-# Load once globally (fast inference later)
-reranker_model = CrossEncoder("cross-encoder/ms-marco-MiniLM-L-6-v2")
+MODEL_CACHE_DIR = Path(__file__).resolve().parents[1] / ".cache" / "huggingface"
+LOCAL_FILES_ONLY = os.getenv("HF_LOCAL_FILES_ONLY", "true").lower() in {"1", "true", "yes"}
+
+
+@lru_cache(maxsize=1)
+def get_reranker_model():
+    model_name = os.getenv("RERANKER_MODEL", "cross-encoder/ms-marco-MiniLM-L-6-v2")
+    return CrossEncoder(
+        model_name,
+        cache_folder=str(MODEL_CACHE_DIR),
+        local_files_only=LOCAL_FILES_ONLY
+    )
 
 
 def rerank_documents(query, documents, top_k=3):
-
     if not documents:
         return []
 
-    pairs = [(query, doc.page_content) for doc in documents]
-
-    scores = reranker_model.predict(pairs)
+    try:
+        reranker_model = get_reranker_model()
+        pairs = [(query, doc.page_content) for doc in documents]
+        scores = reranker_model.predict(pairs)
+    except Exception:
+        return documents[:top_k]
 
     scored_docs = list(zip(documents, scores))
-
-    # Sort by relevance score
     ranked_docs = sorted(
         scored_docs,
-        key=lambda x: x[1],
+        key=lambda item: item[1],
         reverse=True
     )
 
