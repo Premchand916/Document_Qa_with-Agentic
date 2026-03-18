@@ -4,27 +4,6 @@ from collections import defaultdict
 from agents.orchestrator_agent import create_orchestrator
 
 
-def extract_text(response):
-    if hasattr(response, "content"):
-        content = response.content
-
-        if isinstance(content, str):
-            return content
-
-        if isinstance(content, list):
-            texts = []
-            for item in content:
-                if hasattr(item, "text") and item.text:
-                    texts.append(item.text)
-                elif isinstance(item, dict) and item.get("text"):
-                    texts.append(item["text"])
-                else:
-                    texts.append(str(item))
-            return " ".join(texts)
-
-    return str(response)
-
-
 def _clean_question(line):
     cleaned = re.sub(r"^\s*(?:[-*]|\d+[.)])\s*", "", line).strip()
     if not cleaned:
@@ -87,37 +66,78 @@ def _build_balanced_document_excerpt(documents, max_sources=8, chunks_per_source
     return "\n\n".join(excerpt_sections)
 
 
-def generate_questions(documents):
+def _parse_question_response(response):
+    if hasattr(response, "content"):
+        raw = response.content
+    else:
+        raw = response
+
+    if isinstance(raw, list):
+        parts = []
+        for item in raw:
+            if hasattr(item, "text") and item.text:
+                parts.append(item.text)
+            elif isinstance(item, dict):
+                parts.append(item.get("text", str(item)))
+            else:
+                parts.append(str(item))
+        raw = "\n".join(parts)
+
+    if isinstance(raw, dict):
+        raw = raw.get("text", "")
+
+    clean_questions = []
+    for question in str(raw).split("\n"):
+        cleaned = _clean_question(question.strip("- ").strip())
+        if len(cleaned.strip()) > 10 and cleaned not in clean_questions:
+            clean_questions.append(cleaned)
+
+    return clean_questions[:5]
+
+
+def generate_questions(llm_or_documents, context=None):
+    if context is not None:
+        llm = llm_or_documents
+        prompt = f"""
+Based on the following document, generate 5 meaningful questions.
+
+Document:
+{context}
+
+Return ONLY a clean list of questions.
+"""
+        return _parse_question_response(llm.invoke(prompt))
+
+    documents = llm_or_documents
     if not documents:
         return []
 
     text = _build_balanced_document_excerpt(documents)
-    llm = create_orchestrator()
+    file_types = []
+    for doc in documents:
+        file_type = doc.metadata.get("file_type")
+        if file_type and file_type.upper() not in file_types:
+            file_types.append(file_type.upper())
 
+    llm = create_orchestrator()
     prompt = f"""
 Generate 5 concise, high-value suggested questions based on the full uploaded document set.
 Make sure the questions reflect all distinct documents provided, not just the first one.
 If there are multiple documents, include comparison, synthesis, overlap, and contrast where useful.
+Uploaded file types: {", ".join(file_types) if file_types else "unknown"}
 
 Rules:
-- Only return questions
-- No explanations
-- No numbering or bullets
+- Return only questions
+- No numbering
 - No JSON
-- Each question on a new line
+- No explanations
 
 Document set excerpts:
 {text}
 """
 
     try:
-        response = llm.invoke(prompt)
-        content = extract_text(response)
-        generated = [_clean_question(line) for line in content.splitlines()]
-        questions = []
-        for question in generated:
-            if question and question not in questions:
-                questions.append(question)
+        questions = _parse_question_response(llm.invoke(prompt))
     except Exception:
         questions = []
 

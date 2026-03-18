@@ -5,6 +5,9 @@ ALLOWED_INTENTS = {
     "data_analysis",
     "summarization",
     "document_comparison",
+    "risk_review",
+    "action_plan",
+    "research_synthesis",
 }
 
 
@@ -23,6 +26,15 @@ def _heuristic_intent(query):
     ):
         return "data_analysis"
 
+    if any(keyword in query_lower for keyword in ("risk", "issue", "concern", "mitigation", "compliance")):
+        return "risk_review"
+
+    if any(keyword in query_lower for keyword in ("action", "next step", "plan", "roadmap", "priority")):
+        return "action_plan"
+
+    if any(keyword in query_lower for keyword in ("theme", "synthesis", "insight", "patterns", "research")):
+        return "research_synthesis"
+
     return "document_qa"
 
 
@@ -35,6 +47,9 @@ def classify_intent(state):
         "data_analysis\n"
         "summarization\n"
         "document_comparison\n"
+        "risk_review\n"
+        "action_plan\n"
+        "research_synthesis\n"
         f"Query: {query}\n"
         "Answer with only the label."
     )

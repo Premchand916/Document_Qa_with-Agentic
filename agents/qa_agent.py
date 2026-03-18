@@ -1,78 +1,61 @@
 from agents.orchestrator_agent import create_orchestrator
 
 
-from agents.orchestrator_agent import create_orchestrator
-
-
 def qa_agent(state):
-    history = state.get("chat_history", [])
-
-    history_text = "\n".join(
-        f"{m['role']}: {m['content']}" for m in history
-    )
-
     query = state["query"]
     docs = state.get("documents", [])
 
     if docs:
         best_doc = docs[0]
-
         source = best_doc.metadata.get("source", "Unknown")
         page = best_doc.metadata.get("page", "N/A")
-
         state["source"] = f"{source} (page {page})"
     else:
         state["source"] = "No source"
 
     if not docs:
-        state["draft_answer"] = "No relevant information found."
+        state["response"] = "No relevant information found."
         return state
 
-    # Build context
-    context = "\n\n".join(
-        doc.page_content for doc in docs
-    )
-
-    # Collect sources
-    sources = []
-    for doc in docs:
-        meta = doc.metadata
-        source = meta.get("source", "Unknown document")
-        page = meta.get("page", "N/A")
-
-        sources.append(f"{source} (page {page})")
+    context = "\n\n".join(doc.page_content for doc in docs)
 
     prompt = f"""
-    Conversation History:
-    {history_text}
+You are a document QA assistant.
 
-    Context:
-    {context}
+Answer the question ONLY using the provided context.
 
-    Question:
-    {query}
+Context:
+{context}
 
-    Answer using the document context and conversation history.
-    """
+Question:
+{query}
+
+Instructions:
+- Give clear and structured answer
+- Do NOT include reasoning steps
+- Do NOT include "Thought", "Action", "Observation"
+- Only return final answer
+"""
 
     llm = create_orchestrator()
     response = llm.invoke(prompt)
 
-    content = response.content
+    if hasattr(response, "content"):
+        text = response.content
+    else:
+        text = str(response)
 
-    if isinstance(content, list):
+    if isinstance(text, list):
         extracted_text = []
-        for item in content:
-            if isinstance(item, dict) and "text" in item:
+        for item in text:
+            if hasattr(item, "text") and item.text:
+                extracted_text.append(item.text)
+            elif isinstance(item, dict) and "text" in item:
                 extracted_text.append(item["text"])
             else:
                 extracted_text.append(str(item))
+        text = " ".join(extracted_text)
 
-        content = " ".join(extracted_text)
-
-    state["draft_answer"] = str(content).strip()
-
-    # Attach citations
-    state["sources"] = list(set(sources))
+    state["response"] = str(text).strip()
 
     return state

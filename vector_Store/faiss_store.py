@@ -1,5 +1,6 @@
 from pathlib import Path
 import streamlit as st
+from functools import lru_cache
 
 from embeddings.Hugging_face_embedding import get_embedding_model
 
@@ -18,10 +19,15 @@ def _get_faiss_class():
     return FAISS
 
 
+@lru_cache(maxsize=2)
+def get_cached_embedding():
+    return get_embedding_model()
+
+
 def create_vector_store(documents):
     FAISS = _get_faiss_class()
 
-    embedding_model = get_embedding_model()
+    embedding_model = get_cached_embedding()
 
     vectorstore = FAISS.from_documents(
         documents,
@@ -43,7 +49,7 @@ def load_vector_store():
         return None
 
     FAISS = _get_faiss_class()
-    embedding_model = get_embedding_model()
+    embedding_model = get_cached_embedding()
 
     vectorstore = FAISS.load_local(
         str(DB_PATH),

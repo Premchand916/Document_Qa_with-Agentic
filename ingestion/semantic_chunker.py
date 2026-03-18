@@ -12,6 +12,14 @@ def semantic_chunk_documents(documents):
     chunked_docs = []
 
     for doc in documents:
+        content_type = doc.metadata.get("content_type")
+        if content_type in {"table_summary", "table_rows", "slide", "json_document"}:
+            chunked_docs.append(doc)
+            continue
+
+        if len(doc.page_content) <= 900:
+            chunked_docs.append(doc)
+            continue
 
         chunks = splitter.split_text(doc.page_content)
 
