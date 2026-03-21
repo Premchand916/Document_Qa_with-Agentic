@@ -107,6 +107,10 @@ def _parse_line_value(text, label):
 
 
 def plan_response_strategy(state):
+    tracker = state.get("step_tracker")
+    if tracker:
+        tracker["status"].write("Planning answer structure...")
+
     query = state["query"]
     answer_mode = state.get("answer_mode", "Auto")
     audience = state.get("audience", "General")

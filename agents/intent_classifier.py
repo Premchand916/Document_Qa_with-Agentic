@@ -39,6 +39,10 @@ def _heuristic_intent(query):
 
 
 def classify_intent(state):
+    tracker = state.get("step_tracker")
+    if tracker:
+        tracker["status"].write("Classifying intent...")
+
     query = state["query"]
     prompt = (
         "You are an intent router.\n"

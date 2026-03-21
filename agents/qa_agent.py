@@ -2,6 +2,10 @@ from agents.orchestrator_agent import create_orchestrator
 
 
 def qa_agent(state):
+    tracker = state.get("step_tracker")
+    if tracker:
+        tracker["status"].write("Generating final answer...")
+
     query = state["query"]
     docs = state.get("documents", [])
 

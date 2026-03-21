@@ -36,4 +36,8 @@ def rerank_documents(query, documents, top_k=3):
         reverse=True
     )
 
-    return [doc for doc, _ in ranked_docs[:top_k]]
+    result = []
+    for doc, score in ranked_docs[:top_k]:
+        doc.metadata["rerank_score"] = float(score)
+        result.append(doc)
+    return result
