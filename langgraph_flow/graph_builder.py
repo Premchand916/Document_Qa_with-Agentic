@@ -7,6 +7,7 @@ from agents.qa_agent import qa_agent
 from agents.response_planner import plan_response_strategy
 from agents.retriever_agent import retriever_agent
 from agents.web_search_agent import web_search_agent
+from langgraph_flow.state import AgentState
 
 
 def route_entry(state):
@@ -18,7 +19,7 @@ def route_after_planner(state):
 
 
 def build_graph():
-    workflow = StateGraph(dict)
+    workflow = StateGraph(AgentState)
 
     # Entry passthrough node — routes to web search or document pipeline
     workflow.add_node("entry", lambda s: s)

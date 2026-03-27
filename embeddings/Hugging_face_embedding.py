@@ -5,7 +5,7 @@ from pathlib import Path
 from langchain_huggingface import HuggingFaceEmbeddings
 
 MODEL_CACHE_DIR = Path(__file__).resolve().parents[1] / ".cache" / "huggingface"
-LOCAL_FILES_ONLY = os.getenv("HF_LOCAL_FILES_ONLY", "true").lower() in {"1", "true", "yes"}
+LOCAL_FILES_ONLY = os.getenv("HF_LOCAL_FILES_ONLY", "false").lower() in {"1", "true", "yes"}
 
 
 @lru_cache(maxsize=1)
