@@ -9,3 +9,4 @@ class AgentState(TypedDict, total=False):
     thoughts: List[str]
     tools_used: List[str]
     vectorstore: Any
+    use_web_search: bool
