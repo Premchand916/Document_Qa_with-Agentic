@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "Streamlit App",
+      "runtimeExecutable": "streamlit",
+      "runtimeArgs": ["run", "app/main.py", "--server.port", "8501"],
+      "port": 8501
+    },
+    {
+      "name": "Ollama Local LLM",
+      "runtimeExecutable": "ollama",
+      "runtimeArgs": ["serve"],
+      "port": 11434
+    }
+  ]
+}

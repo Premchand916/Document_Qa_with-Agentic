@@ -39,10 +39,8 @@ def retriever_agent(state):
         combined_docs[doc.page_content] = doc
 
     merged_docs = list(combined_docs.values())
-    final_docs = rerank_documents(query, merged_docs[:4], top_k=1)
-    best_doc = final_docs[0] if final_docs else None
+    final_docs = rerank_documents(query, merged_docs[:6], top_k=3)
 
-    state["retrieved_docs"] = [best_doc] if best_doc else []
-    state["documents"] = [best_doc] if best_doc else []
+    state["documents"] = final_docs if final_docs else []
 
     return state

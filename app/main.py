@@ -17,7 +17,7 @@ from app.prompt_library import PROMPT_LIBRARY, get_prompt_categories
 from ingestion.file_loader import SUPPORTED_FILE_TYPES, extract_tabular_assets, load_uploaded_file
 from ingestion.semantic_chunker import semantic_chunk_documents
 from langgraph_flow.graph_builder import build_graph
-from vector_store.faiss_store import create_vector_store, load_vector_store
+from vector_Store.faiss_store import create_vector_store, load_vector_store
 
 st.set_page_config(page_title="NotebookLM — Document Intelligence", layout="wide")
 
@@ -301,6 +301,7 @@ def initialize_state():
         "use_web_search": False,
         "notes": [],
         "uploaded_file_list": [],
+        "llm_provider": os.getenv("LLM_PROVIDER", "gemini"),
     }
     for key, value in defaults.items():
         if key not in st.session_state:
@@ -569,6 +570,42 @@ with col_sources:
     if st.session_state.use_web_search:
         st.markdown(
             '<div style="color:#5dc8ba;font-size:.78rem;margin-top:.3rem;">Web mode active — answers come from DuckDuckGo.</div>',
+            unsafe_allow_html=True,
+        )
+
+    st.divider()
+
+    # LLM Provider toggle (Gemini ↔ Ollama)
+    st.markdown(
+        '<div style="color:#a8b3bc;font-size:.78rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;margin-bottom:.4rem;">LLM Provider</div>',
+        unsafe_allow_html=True,
+    )
+    provider_options = ["gemini", "ollama"]
+    current_provider = st.session_state.llm_provider
+    new_provider = st.radio(
+        "LLM provider",
+        options=provider_options,
+        index=provider_options.index(current_provider) if current_provider in provider_options else 0,
+        format_func=lambda p: "🤖 Google Gemini" if p == "gemini" else "🦙 Ollama (Local)",
+        key="llm_provider_radio",
+        label_visibility="collapsed",
+        horizontal=True,
+    )
+    if new_provider != current_provider:
+        st.session_state.llm_provider = new_provider
+        os.environ["LLM_PROVIDER"] = new_provider
+        st.rerun()
+
+    os.environ["LLM_PROVIDER"] = st.session_state.llm_provider
+
+    if st.session_state.llm_provider == "ollama":
+        st.markdown(
+            '<div style="color:#f6b44c;font-size:.78rem;margin-top:.3rem;">🦙 Ollama active — make sure Ollama is running locally on port 11434.</div>',
+            unsafe_allow_html=True,
+        )
+    else:
+        st.markdown(
+            '<div style="color:#a8b3bc;font-size:.78rem;margin-top:.3rem;">🤖 Gemini active — uses your GOOGLE_API_KEY.</div>',
             unsafe_allow_html=True,
         )
 
