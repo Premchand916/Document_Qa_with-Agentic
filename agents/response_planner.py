@@ -108,6 +108,7 @@ def _parse_line_value(text, label):
 
 def plan_response_strategy(state):
     query = state["query"]
+    prompt_query = state.get("prompt_query", query)
     answer_mode = state.get("answer_mode", "Auto")
     audience = state.get("audience", "General")
     response_depth = state.get("response_depth", "Balanced")
@@ -120,6 +121,8 @@ You are a response planning agent for a document intelligence product.
 Design the best answer strategy for the user's question before retrieval and generation.
 
 Question: {query}
+Structured task prompt:
+{prompt_query}
 Selected answer mode: {answer_mode}
 Audience: {audience}
 Depth: {response_depth}

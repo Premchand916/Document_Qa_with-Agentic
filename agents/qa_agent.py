@@ -7,6 +7,7 @@ from agents.orchestrator_agent import (
 
 def qa_agent(state):
     query = state["query"]
+    prompt_query = state.get("prompt_query", query)
     docs = state.get("documents", [])
     use_web_search = bool(state.get("use_web_search")) or state.get("source") == "Web"
 
@@ -51,6 +52,8 @@ Web Search Results:
 {context}
 
 Question: {query}
+Structured task prompt:
+{prompt_query}
 
 Answer:"""
 
@@ -66,6 +69,8 @@ Document Context:
 {context}
 
 Question: {query}
+Structured task prompt:
+{prompt_query}
 
 Instructions:
 - Give a clear, structured answer based on the context

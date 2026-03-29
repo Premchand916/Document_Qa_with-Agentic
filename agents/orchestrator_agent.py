@@ -30,6 +30,13 @@ class OllamaModelMemoryError(RuntimeError):
     """Raised when the configured Ollama model does not fit in memory."""
 
 
+def get_active_provider():
+    provider = os.getenv("LLM_PROVIDER", "").lower().strip()
+    if provider:
+        return provider
+    return "gemini" if os.getenv("GOOGLE_API_KEY") else "ollama"
+
+
 @lru_cache(maxsize=1)
 def _get_gemini_llm():
     if not os.getenv("GOOGLE_API_KEY"):
@@ -176,7 +183,7 @@ def _build_memory_error_message(primary_model, attempted_models):
 
 def create_orchestrator():
     """Return the active LLM based on LLM_PROVIDER env var."""
-    provider = os.getenv("LLM_PROVIDER", "gemini").lower().strip()
+    provider = get_active_provider()
     if provider == "ollama":
         model_name, base_url = _get_ollama_settings()
         os.environ["OLLAMA_ACTIVE_MODEL"] = model_name
@@ -185,7 +192,7 @@ def create_orchestrator():
 
 
 def invoke_orchestrator(prompt):
-    provider = os.getenv("LLM_PROVIDER", "gemini").lower().strip()
+    provider = get_active_provider()
     if provider != "ollama":
         return _get_gemini_llm().invoke(prompt)
 

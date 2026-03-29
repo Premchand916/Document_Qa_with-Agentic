@@ -12,11 +12,13 @@ if ROOT_DIR not in sys.path:
 
 import streamlit as st
 
+from agents.orchestrator_agent import get_active_provider
 from agents.question_generator import generate_questions
 from app.prompt_library import PROMPT_LIBRARY, get_prompt_categories
 from ingestion.file_loader import SUPPORTED_FILE_TYPES, extract_tabular_assets, load_uploaded_file
 from ingestion.semantic_chunker import semantic_chunk_documents
 from langgraph_flow.graph_builder import build_graph
+from utils.prompt_skill import build_prompted_query, get_prompt_skill
 from vector_Store.faiss_store import create_vector_store, load_vector_store
 
 st.set_page_config(page_title="NotebookLM — Document Intelligence", layout="wide")
@@ -306,7 +308,7 @@ def initialize_state():
         "use_web_search": False,
         "notes": [],
         "uploaded_file_list": [],
-        "llm_provider": os.getenv("LLM_PROVIDER", "gemini"),
+        "llm_provider": get_active_provider(),
     }
     for key, value in defaults.items():
         if key not in st.session_state:
@@ -578,16 +580,21 @@ with col_sources:
 
     # Web search toggle
     web_label = "🌐 Web Search: ON" if st.session_state.use_web_search else "🌐 Web Search: OFF"
-    web_help = "Click to disable web search and return to document mode." if st.session_state.use_web_search else "Click to enable DuckDuckGo web search. Documents will be bypassed."
+    web_help = "Click to disable web search and return to document mode." if st.session_state.use_web_search else "Click to enable Tavily web search. Documents will be bypassed."
     if st.button(web_label, key="web_toggle_btn", help=web_help, use_container_width=True):
         st.session_state.use_web_search = not st.session_state.use_web_search
         st.rerun()
 
     if st.session_state.use_web_search:
         st.markdown(
-            '<div style="color:#5dc8ba;font-size:.78rem;margin-top:.3rem;">Web mode active — answers come from DuckDuckGo.</div>',
+            '<div style="color:#5dc8ba;font-size:.78rem;margin-top:.3rem;">Web mode active — answers come from Tavily.</div>',
             unsafe_allow_html=True,
         )
+        if not os.getenv("TAVILY_API_KEY"):
+            st.markdown(
+                '<div style="color:#f6b44c;font-size:.76rem;margin-top:.2rem;">Add `TAVILY_API_KEY` to your `.env` file to enable live web search.</div>',
+                unsafe_allow_html=True,
+            )
 
     st.divider()
 
@@ -614,6 +621,7 @@ with col_sources:
 
     os.environ["LLM_PROVIDER"] = st.session_state.llm_provider
     active_ollama_model = os.getenv("OLLAMA_ACTIVE_MODEL") or os.getenv("OLLAMA_MODEL", "llama3.2")
+    prompt_skill = get_prompt_skill()
 
     if st.session_state.llm_provider == "ollama":
         st.markdown(
@@ -623,6 +631,12 @@ with col_sources:
     else:
         st.markdown(
             '<div style="color:#a8b3bc;font-size:.78rem;margin-top:.3rem;">🤖 Gemini active — uses your GOOGLE_API_KEY.</div>',
+            unsafe_allow_html=True,
+        )
+
+    if prompt_skill.get("path"):
+        st.markdown(
+            f'<div style="color:#a8b3bc;font-size:.78rem;margin-top:.3rem;">Prompt profile active — {html.escape(Path(prompt_skill["path"]).name)}.</div>',
             unsafe_allow_html=True,
         )
 
@@ -665,7 +679,7 @@ with col_chat:
     # Web search status indicator above chat input
     if st.session_state.use_web_search:
         st.markdown(
-            '<div style="display:flex;align-items:center;gap:.4rem;margin:.4rem 0 .2rem 0;"><span style="color:#5dc8ba;font-size:.82rem;font-weight:700;">🌐 Web Search is ON</span><span style="color:#a8b3bc;font-size:.78rem;">— answers will come from DuckDuckGo</span></div>',
+            '<div style="display:flex;align-items:center;gap:.4rem;margin:.4rem 0 .2rem 0;"><span style="color:#5dc8ba;font-size:.82rem;font-weight:700;">🌐 Web Search is ON</span><span style="color:#a8b3bc;font-size:.78rem;">— answers will come from Tavily</span></div>',
             unsafe_allow_html=True,
         )
 
@@ -706,8 +720,24 @@ with col_chat:
             st.session_state.chat_history.append(assistant_message)
             st.rerun()
         else:
+            prompt_query = build_prompted_query(
+                query,
+                {
+                    "vectorstore": st.session_state.vectorstore,
+                    "chat_history": st.session_state.chat_history,
+                    "answer_mode": st.session_state.answer_mode,
+                    "audience": st.session_state.audience,
+                    "response_depth": st.session_state.response_depth,
+                    "uploaded_file_types": st.session_state.uploaded_file_types,
+                    "tabular_assets": st.session_state.tabular_assets,
+                    "use_web_search": st.session_state.use_web_search,
+                },
+            )
             state = {
                 "query": query,
+                "prompt_query": prompt_query,
+                "web_search_query": query,
+                "prompt_skill_path": prompt_skill.get("path", ""),
                 "vectorstore": st.session_state.vectorstore,
                 "chat_history": st.session_state.chat_history,
                 "answer_mode": st.session_state.answer_mode,

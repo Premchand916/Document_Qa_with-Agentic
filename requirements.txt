@@ -13,4 +13,4 @@ python-dotenv
 sentence-transformers
 langchain-huggingface
 rank-bm25
-duckduckgo-search>=6.0
+tavily-python

@@ -38,6 +38,7 @@ def _extract_final_answer(text):
 
 def react_agent(state):
     query = state["query"]
+    prompt_query = state.get("prompt_query", query)
     documents = retrieve_documents_tool(state)
     history = memory_tool(state)[-6:]
     response_plan = state.get("response_plan", {})
@@ -110,6 +111,9 @@ Document context:
 
 Question:
 {query}
+
+Structured task prompt:
+{prompt_query}
 
 Answer:
 """

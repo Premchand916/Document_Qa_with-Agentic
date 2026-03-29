@@ -4,6 +4,9 @@ from typing import Any, Dict, List, Optional, TypedDict
 class AgentState(TypedDict, total=False):
     # ── Core query fields ──────────────────────────────────────────────────────
     query: str                          # User's raw question
+    prompt_query: str                   # Structured task prompt derived from the raw question
+    web_search_query: str               # Search-optimized query for the web search backend
+    prompt_skill_path: str              # Path to the active prompt skill/profile file
     intent: str                         # Classified intent (e.g. "factual", "analytical")
     response: str                       # Final answer returned to the UI
 
