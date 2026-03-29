@@ -1,7 +1,7 @@
 import re
 from collections import defaultdict
 
-from agents.orchestrator_agent import create_orchestrator
+from agents.orchestrator_agent import invoke_orchestrator
 
 
 def _clean_question(line):
@@ -97,7 +97,6 @@ def _parse_question_response(response):
 
 def generate_questions(llm_or_documents, context=None):
     if context is not None:
-        llm = llm_or_documents
         prompt = f"""
 Based on the following document, generate 5 meaningful questions.
 
@@ -106,7 +105,9 @@ Document:
 
 Return ONLY a clean list of questions.
 """
-        return _parse_question_response(llm.invoke(prompt))
+        if hasattr(llm_or_documents, "invoke"):
+            return _parse_question_response(llm_or_documents.invoke(prompt))
+        return _parse_question_response(invoke_orchestrator(prompt))
 
     documents = llm_or_documents
     if not documents:
@@ -119,7 +120,6 @@ Return ONLY a clean list of questions.
         if file_type and file_type.upper() not in file_types:
             file_types.append(file_type.upper())
 
-    llm = create_orchestrator()
     prompt = f"""
 Generate 5 concise, high-value suggested questions based on the full uploaded document set.
 Make sure the questions reflect all distinct documents provided, not just the first one.
@@ -137,7 +137,7 @@ Document set excerpts:
 """
 
     try:
-        questions = _parse_question_response(llm.invoke(prompt))
+        questions = _parse_question_response(invoke_orchestrator(prompt))
     except Exception:
         questions = []
 

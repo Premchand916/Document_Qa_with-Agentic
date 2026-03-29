@@ -1,16 +1,21 @@
-from agents.orchestrator_agent import create_orchestrator
+from agents.orchestrator_agent import (
+    LLMConfigurationError,
+    OllamaModelMemoryError,
+    invoke_orchestrator,
+)
 
 
 def qa_agent(state):
     query = state["query"]
     docs = state.get("documents", [])
+    use_web_search = bool(state.get("use_web_search")) or state.get("source") == "Web"
 
     # ── Detect mode ───────────────────────────────────────────────────────────
     is_web = any(
         d.metadata.get("content_type") == "web_result"
         for d in docs
         if hasattr(d, "metadata")
-    ) if docs else False
+    ) if docs else use_web_search
 
     # ── Build source label ────────────────────────────────────────────────────
     if docs:
@@ -18,10 +23,12 @@ def qa_agent(state):
         source = best_doc.metadata.get("source", "Unknown")
         page = best_doc.metadata.get("page", "N/A")
         state["source"] = f"{source} (page {page})"
-    else:
+    elif not state.get("source"):
         state["source"] = "No source"
 
     if not docs:
+        if state.get("response"):
+            return state
         state["response"] = (
             "No relevant information found. "
             + ("Try a different search query." if is_web else
@@ -68,8 +75,11 @@ Instructions:
 Answer:"""
 
     # ── Call LLM ──────────────────────────────────────────────────────────────
-    llm = create_orchestrator()
-    response = llm.invoke(prompt)
+    try:
+        response = invoke_orchestrator(prompt)
+    except (LLMConfigurationError, OllamaModelMemoryError) as exc:
+        state["response"] = str(exc)
+        return state
 
     if hasattr(response, "content"):
         text = response.content

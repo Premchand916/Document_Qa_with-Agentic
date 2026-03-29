@@ -22,6 +22,11 @@ def retriever_agent(state):
     vector_docs = list(cached_search(query, vectorstore_id))
 
     all_docs = list(vectorstore.docstore._dict.values())
+    if not all_docs:
+        state["retrieved_docs"] = []
+        state["documents"] = vector_docs[:3]
+        return state
+
     corpus = [doc.page_content.split() for doc in all_docs]
     bm25 = BM25Okapi(corpus)
     scores = bm25.get_scores(query.split())
@@ -41,6 +46,7 @@ def retriever_agent(state):
     merged_docs = list(combined_docs.values())
     final_docs = rerank_documents(query, merged_docs[:6], top_k=3)
 
+    state["retrieved_docs"] = merged_docs
     state["documents"] = final_docs if final_docs else []
 
     return state

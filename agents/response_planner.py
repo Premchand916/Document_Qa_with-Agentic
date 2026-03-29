@@ -1,6 +1,6 @@
 import re
 
-from agents.orchestrator_agent import create_orchestrator
+from agents.orchestrator_agent import invoke_orchestrator
 
 ALLOWED_INTENTS = {
     "document_qa",
@@ -132,11 +132,10 @@ answer_mode: <best final mode>
 output_format: <short phrase>
 sections: <section 1 | section 2 | section 3 | section 4>
 retrieval_focus: <short phrase>
-"""
+    """
 
     try:
-        llm = create_orchestrator()
-        response = llm.invoke(prompt)
+        response = invoke_orchestrator(prompt)
         content = response.content if hasattr(response, "content") else str(response)
         if isinstance(content, list):
             content = " ".join(str(item) for item in content)

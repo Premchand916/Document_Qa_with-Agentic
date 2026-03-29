@@ -1,4 +1,4 @@
-from agents.orchestrator_agent import create_orchestrator
+from agents.orchestrator_agent import invoke_orchestrator
 
 ALLOWED_INTENTS = {
     "document_qa",
@@ -55,8 +55,7 @@ def classify_intent(state):
     )
 
     try:
-        llm = create_orchestrator()
-        response = llm.invoke(prompt)
+        response = invoke_orchestrator(prompt)
         content = response.content
 
         if isinstance(content, list):

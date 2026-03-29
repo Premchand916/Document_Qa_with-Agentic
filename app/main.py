@@ -197,7 +197,12 @@ def prepare_uploaded_documents(files):
         raw_documents.extend(load_uploaded_file(uploaded_file))
         tabular_assets.extend(extract_tabular_assets(uploaded_file))
     chunked_documents = semantic_chunk_documents(raw_documents)
-    vectorstore = create_vector_store(chunked_documents)
+    vectorstore = None
+    try:
+        vectorstore = create_vector_store(chunked_documents)
+    except Exception:
+        if not tabular_assets:
+            raise
     questions = generate_questions(raw_documents)
     source_count = len({doc.metadata.get("source", "Unknown") for doc in raw_documents})
     return (
@@ -433,9 +438,14 @@ except Exception as exc:
 
 # ── Top Bar ──────────────────────────────────────────────────────────────────
 kb_ready = st.session_state.vectorstore is not None
+data_ready = bool(st.session_state.tabular_assets)
 web_on = st.session_state.use_web_search
-status_class = "status-pill ready" if kb_ready or web_on else "status-pill"
-status_text = "Knowledge base ready" if kb_ready else ("Web search active" if web_on else "Upload files to begin")
+status_class = "status-pill ready" if kb_ready or data_ready or web_on else "status-pill"
+status_text = (
+    "Knowledge base ready" if kb_ready else
+    ("Structured data ready" if data_ready else
+     ("Web search active" if web_on else "Upload files to begin"))
+)
 
 answer_count = len([m for m in st.session_state.chat_history if m["role"] == "assistant"])
 
@@ -530,6 +540,12 @@ with col_sources:
             unsafe_allow_html=True,
         )
 
+    if st.session_state.tabular_assets and st.session_state.vectorstore is None:
+        st.markdown(
+            '<div style="color:#5dc8ba;font-size:.8rem;padding:.3rem 0 .1rem 0;">Structured-data mode is available. Semantic search is unavailable until the embedding model/index can be built.</div>',
+            unsafe_allow_html=True,
+        )
+
     st.divider()
 
     # Answer controls
@@ -597,10 +613,11 @@ with col_sources:
         st.rerun()
 
     os.environ["LLM_PROVIDER"] = st.session_state.llm_provider
+    active_ollama_model = os.getenv("OLLAMA_ACTIVE_MODEL") or os.getenv("OLLAMA_MODEL", "llama3.2")
 
     if st.session_state.llm_provider == "ollama":
         st.markdown(
-            '<div style="color:#f6b44c;font-size:.78rem;margin-top:.3rem;">🦙 Ollama active — make sure Ollama is running locally on port 11434.</div>',
+            f'<div style="color:#f6b44c;font-size:.78rem;margin-top:.3rem;">🦙 Ollama active — model: {html.escape(active_ollama_model)}. If a large model runs out of RAM, the app will try a smaller installed local model automatically.</div>',
             unsafe_allow_html=True,
         )
     else:
@@ -664,7 +681,11 @@ with col_chat:
         user_message = {"role": "user", "content": query}
         st.session_state.chat_history.append(user_message)
 
-        can_run = st.session_state.use_web_search or st.session_state.vectorstore is not None
+        can_run = (
+            st.session_state.use_web_search
+            or st.session_state.vectorstore is not None
+            or bool(st.session_state.tabular_assets)
+        )
 
         if not can_run:
             response = "Upload at least one file, or enable Web Search to ask questions."

@@ -1,4 +1,8 @@
-from agents.orchestrator_agent import create_orchestrator
+from agents.orchestrator_agent import (
+    LLMConfigurationError,
+    OllamaModelMemoryError,
+    invoke_orchestrator,
+)
 from agents.tools import memory_tool, retrieve_documents_tool
 
 
@@ -75,7 +79,6 @@ def react_agent(state):
     )
     planned_sections = response_plan.get("sections", ["Answer", "Evidence", "Takeaway"])
 
-    llm = create_orchestrator()
     prompt = f"""
 You are an AI R&D assistant answering questions about uploaded documents.
 Use only the provided document context and recent conversation.
@@ -111,7 +114,12 @@ Question:
 Answer:
 """
 
-    response = llm.invoke(prompt)
+    try:
+        response = invoke_orchestrator(prompt)
+    except (LLMConfigurationError, OllamaModelMemoryError) as exc:
+        state["response"] = str(exc)
+        return state
+
     answer = _extract_final_answer(_extract_text(response))
 
     if not answer:
