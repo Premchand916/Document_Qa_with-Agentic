@@ -4,7 +4,9 @@ langchain-community
 langchain-google-genai
 langchain-ollama
 faiss-cpu
-streamlit
+fastapi
+uvicorn[standard]
+python-multipart
 pandas
 pdfplumber
 python-pptx
@@ -14,3 +16,5 @@ sentence-transformers
 langchain-huggingface
 rank-bm25
 tavily-python
+Pillow
+pytesseract

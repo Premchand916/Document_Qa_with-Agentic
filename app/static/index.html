@@ -1,0 +1,754 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Nexus Intelligence</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<style>
+/* ── Reset & tokens ─────────────────────────────────────────────────── */
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#020810;--bg1:#040D1A;--bg2:#071120;
+  --surf:rgba(7,17,32,.88);--surf2:rgba(255,255,255,.04);--surf3:rgba(255,255,255,.07);
+  --border:rgba(255,255,255,.07);--border2:rgba(0,212,255,.16);
+  --txt:#E2E8F0;--txt2:#8B9EC7;--muted:#475569;
+  --cyan:#00D4FF;--violet:#8B5CF6;--amber:#F6B44C;--green:#00E5A0;--red:#EF4444;
+  --glow-c:0 0 22px rgba(0,212,255,.18),0 0 70px rgba(0,212,255,.06);
+  --glow-v:0 0 22px rgba(139,92,246,.18),0 0 70px rgba(139,92,246,.06);
+  --r1:6px;--r2:10px;--r3:14px;--r4:18px;--r5:24px;--rf:9999px;
+  --f:'Inter',-apple-system,sans-serif;--fm:'JetBrains Mono','Fira Code',monospace;
+}
+html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--txt);font-family:var(--f);font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased}
+[x-cloak]{display:none!important}
+
+/* ── Aurora background ──────────────────────────────────────────────── */
+.aurora{position:fixed;inset:0;pointer-events:none;z-index:0;overflow:hidden}
+@keyframes drift{
+  0%  {transform:translate(0,0) scale(1);opacity:.55}
+  33% {transform:translate(-5%,3%) scale(1.06);opacity:.75}
+  66% {transform:translate(4%,-2%) scale(.96);opacity:.6}
+  100%{transform:translate(0,0) scale(1);opacity:.55}
+}
+.orb{position:absolute;border-radius:50%;filter:blur(90px)}
+.orb1{width:700px;height:560px;left:-8%;top:-8%;background:radial-gradient(circle,rgba(0,212,255,.09) 0%,transparent 68%);animation:drift 22s ease-in-out infinite}
+.orb2{width:560px;height:780px;right:-6%;bottom:5%;background:radial-gradient(circle,rgba(139,92,246,.11) 0%,transparent 68%);animation:drift 26s ease-in-out infinite;animation-delay:-9s}
+.orb3{width:460px;height:460px;left:42%;top:18%;background:radial-gradient(circle,rgba(0,229,160,.06) 0%,transparent 62%);animation:drift 18s ease-in-out infinite;animation-delay:-15s}
+
+/* ── Layout ──────────────────────────────────────────────────────────── */
+body{display:flex;flex-direction:column;position:relative;z-index:1}
+.workspace{flex:1;display:grid;grid-template-columns:292px 1fr 272px;overflow:hidden;min-height:0}
+
+/* ── Topbar ──────────────────────────────────────────────────────────── */
+.topbar{
+  display:flex;align-items:center;justify-content:space-between;
+  height:56px;padding:0 20px;flex-shrink:0;z-index:100;position:relative;
+  background:rgba(4,13,26,.97);backdrop-filter:blur(28px);
+  border-bottom:1px solid var(--border);
+}
+.topbar::after{
+  content:'';position:absolute;bottom:0;left:0;right:0;height:1px;
+  background:linear-gradient(90deg,transparent 0%,rgba(0,212,255,.22) 30%,rgba(139,92,246,.22) 70%,transparent 100%);
+}
+.logo{display:flex;align-items:center;gap:11px}
+@keyframes logoGlow{0%,100%{filter:drop-shadow(0 0 5px rgba(0,212,255,.45))}50%{filter:drop-shadow(0 0 12px rgba(0,212,255,.8))}}
+.logo-hex{font-size:21px;color:var(--cyan);animation:logoGlow 3.5s ease-in-out infinite;line-height:1}
+.logo-name{font-size:13px;font-weight:700;letter-spacing:.2em;color:var(--txt2)}
+.logo-name span{color:var(--cyan)}
+.topbar-right{display:flex;align-items:center;gap:9px}
+.pill{display:inline-flex;align-items:center;gap:7px;padding:4px 13px;border-radius:var(--rf);background:var(--surf2);border:1px solid var(--border);font-size:12px;color:var(--muted);transition:all .3s}
+.pill.ready{border-color:rgba(0,229,160,.32);background:rgba(0,229,160,.08);color:var(--green)}
+.pill-dot{width:6px;height:6px;border-radius:50%;background:currentColor}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.25}}
+.ready .pill-dot{animation:blink 1.8s ease-in-out infinite}
+
+/* ── Panel base ──────────────────────────────────────────────────────── */
+.panel{display:flex;flex-direction:column;overflow:hidden;position:relative;background:rgba(4,13,26,.58)}
+.panel-l{border-right:1px solid var(--border);overflow-y:auto;scrollbar-width:thin;scrollbar-color:var(--border) transparent}
+.panel-r{border-left:1px solid var(--border);overflow-y:auto;scrollbar-width:thin;scrollbar-color:var(--border) transparent}
+.panel-c{display:flex;flex-direction:column;overflow:hidden}
+.p-head{padding:14px 16px 8px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
+.p-label{font-size:11px;font-weight:700;letter-spacing:.16em;color:var(--cyan)}
+
+/* ── Upload area ─────────────────────────────────────────────────────── */
+.upload{
+  margin:4px 12px 12px;border:1.5px dashed rgba(0,212,255,.22);
+  border-radius:var(--r3);padding:22px 16px;text-align:center;cursor:pointer;
+  transition:all .25s;background:rgba(0,212,255,.02);
+}
+.upload:hover,.upload.over{border-color:rgba(0,212,255,.5);background:rgba(0,212,255,.06);box-shadow:var(--glow-c)}
+.upload-ico{font-size:26px;color:var(--cyan);opacity:.65;margin-bottom:8px}
+.upload-txt{font-size:13px;color:var(--txt2);margin-bottom:4px}
+.upload-lnk{color:var(--cyan);cursor:pointer}
+.upload-lnk:hover{text-decoration:underline}
+.upload-sub{font-size:11px;color:var(--muted);letter-spacing:.02em}
+.file-list{padding:0 12px;display:flex;flex-direction:column;gap:4px}
+.file-row{display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:var(--r2);background:var(--surf2);border:1px solid var(--border);font-size:12px;color:var(--txt2);word-break:break-all}
+.f-ico{flex-shrink:0;font-size:15px}
+
+/* ── Indexing spinner ────────────────────────────────────────────────── */
+.indexing{display:flex;align-items:center;gap:10px;padding:8px 16px;color:var(--cyan);font-size:12.5px}
+@keyframes spin{to{transform:rotate(360deg)}}
+.spin{width:15px;height:15px;border:2px solid rgba(0,212,255,.2);border-top-color:var(--cyan);border-radius:50%;animation:spin .75s linear infinite;flex-shrink:0}
+
+/* ── Divider ─────────────────────────────────────────────────────────── */
+.div{height:1px;margin:10px 14px;background:var(--border)}
+
+/* ── Control blocks ──────────────────────────────────────────────────── */
+.ctrl{padding:0 12px;margin-bottom:6px}
+.ctrl-lbl{font-size:10.5px;font-weight:700;letter-spacing:.13em;color:var(--muted);margin-bottom:9px;text-transform:uppercase}
+.ctrl-grp{margin-bottom:9px}
+.ctrl-sub{display:block;font-size:11.5px;color:var(--txt2);margin-bottom:4px}
+.sel{
+  width:100%;padding:7px 30px 7px 10px;border-radius:var(--r2);border:1px solid var(--border);
+  background:var(--surf2);color:var(--txt);font-family:var(--f);font-size:13px;cursor:pointer;
+  appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23475569' stroke-width='2.5'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+  background-repeat:no-repeat;background-position:right 9px center;transition:border-color .2s
+}
+.sel:focus{outline:none;border-color:rgba(0,212,255,.4);box-shadow:0 0 0 2px rgba(0,212,255,.08)}
+.sel option{background:#071120}
+.depth-row{display:flex;gap:5px}
+.d-btn{flex:1;padding:6px;border-radius:var(--r1);border:1px solid var(--border);background:transparent;color:var(--muted);font-family:var(--f);font-size:11.5px;cursor:pointer;transition:all .2s}
+.d-btn.on{border-color:rgba(0,212,255,.42);background:rgba(0,212,255,.1);color:var(--cyan)}
+.d-btn:hover:not(.on){border-color:var(--border2);color:var(--txt2)}
+.prov-row{display:flex;gap:6px}
+.p-btn{flex:1;padding:8px;border-radius:var(--r2);border:1px solid var(--border);background:transparent;color:var(--muted);font-family:var(--f);font-size:12.5px;font-weight:500;cursor:pointer;transition:all .2s}
+.p-btn.on{border-color:rgba(139,92,246,.42);background:rgba(139,92,246,.1);color:var(--violet);box-shadow:var(--glow-v)}
+.p-btn:hover:not(.on){border-color:var(--border2);color:var(--txt2)}
+.web-btn{
+  display:flex;align-items:center;gap:8px;padding:9px 14px;border-radius:var(--r2);
+  border:1px solid var(--border);background:var(--surf2);color:var(--muted);
+  font-family:var(--f);font-size:13px;font-weight:500;cursor:pointer;transition:all .25s;
+  width:calc(100% - 24px);margin:0 12px;
+}
+.web-btn.on{border-color:rgba(0,212,255,.42);background:rgba(0,212,255,.08);color:var(--cyan);box-shadow:var(--glow-c)}
+.web-btn:hover:not(.on){border-color:var(--border2);color:var(--txt2)}
+.sug-btn{
+  display:block;width:100%;text-align:left;padding:8px 10px;
+  border-radius:var(--r2);border:1px solid var(--border);background:var(--surf2);
+  color:var(--txt2);font-family:var(--f);font-size:12px;cursor:pointer;transition:all .2s;
+  margin-bottom:5px;line-height:1.4;
+}
+.sug-btn:hover{border-color:rgba(0,212,255,.3);background:rgba(0,212,255,.05);color:var(--txt)}
+
+/* ── Prompt library ──────────────────────────────────────────────────── */
+.lib{margin:0 14px 12px;border-radius:var(--r3);border:1px solid var(--border);overflow:hidden;flex-shrink:0}
+.lib-toggle{
+  display:flex;align-items:center;justify-content:space-between;
+  width:100%;padding:10px 14px;background:var(--surf2);border:none;
+  color:var(--txt2);font-family:var(--f);font-size:13px;font-weight:500;cursor:pointer;transition:background .2s;
+}
+.lib-toggle:hover{background:var(--surf3);color:var(--txt)}
+.chev{font-size:16px;transition:transform .25s;display:inline-block}
+.chev.r{transform:rotate(180deg)}
+.lib-body{border-top:1px solid var(--border);padding:12px;background:rgba(4,13,26,.55)}
+.cat-row{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:10px}
+.cat-tab{
+  padding:4px 10px;border-radius:var(--rf);border:1px solid var(--border);
+  background:transparent;color:var(--muted);font-family:var(--f);font-size:11px;
+  font-weight:500;cursor:pointer;transition:all .2s;white-space:nowrap;
+}
+.cat-tab.on{border-color:rgba(139,92,246,.42);background:rgba(139,92,246,.12);color:var(--violet)}
+.cat-tab:hover:not(.on){border-color:var(--border2);color:var(--txt2)}
+.p-grid{display:grid;grid-template-columns:1fr 1fr;gap:5px}
+.p-chip{
+  padding:7px 10px;border-radius:var(--r2);border:1px solid var(--border);
+  background:var(--surf2);color:var(--txt2);font-family:var(--f);font-size:11.5px;
+  cursor:pointer;transition:all .2s;text-align:left;line-height:1.3;
+}
+.p-chip:hover{border-color:rgba(0,212,255,.25);background:rgba(0,212,255,.04);color:var(--txt)}
+
+/* ── Chat messages ───────────────────────────────────────────────────── */
+.msgs{
+  flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;
+  gap:16px;scrollbar-width:thin;scrollbar-color:var(--border) transparent;min-height:0;
+}
+@keyframes msgIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+.msg{display:flex;animation:msgIn .25s ease}
+.msg-u{justify-content:flex-end}
+.msg-a{justify-content:flex-start}
+.bubble{max-width:82%}
+.msg-u .bubble{
+  background:linear-gradient(135deg,rgba(0,212,255,.14),rgba(139,92,246,.14));
+  border:1px solid rgba(0,212,255,.2);border-radius:18px 18px 4px 18px;padding:12px 16px;
+}
+.msg-a .bubble{
+  background:rgba(7,17,32,.82);border:1px solid var(--border);
+  border-radius:18px 18px 18px 4px;padding:12px 16px;backdrop-filter:blur(14px);
+}
+.msg-body{font-size:14px;line-height:1.65;color:var(--txt)}
+.msg-body p{margin-bottom:.55em}
+.msg-body p:last-child{margin-bottom:0}
+.msg-body h1,.msg-body h2,.msg-body h3{color:var(--txt);margin:.75em 0 .35em;font-weight:600}
+.msg-body ul,.msg-body ol{padding-left:1.35em;margin:.35em 0}
+.msg-body li{margin-bottom:.22em}
+.msg-body code{font-family:var(--fm);font-size:12px;background:rgba(255,255,255,.08);padding:1px 5px;border-radius:3px;color:var(--cyan)}
+.msg-body pre{background:rgba(0,0,0,.42);border:1px solid var(--border);border-radius:var(--r2);padding:12px;overflow-x:auto;margin:.55em 0}
+.msg-body pre code{background:none;padding:0}
+.msg-body strong{color:var(--txt)}
+.msg-body table{border-collapse:collapse;width:100%;font-size:13px;margin:.5em 0}
+.msg-body th,.msg-body td{border:1px solid var(--border);padding:6px 10px;text-align:left}
+.msg-body th{background:var(--surf2);color:var(--cyan);font-weight:600}
+
+/* ── Source cards ────────────────────────────────────────────────────── */
+.src-cards{margin-top:10px;padding-top:10px;border-top:1px solid var(--border)}
+.src-lbl{font-size:10.5px;font-weight:700;letter-spacing:.1em;color:var(--muted);text-transform:uppercase;margin-bottom:8px}
+.src-list{display:flex;flex-direction:column;gap:5px}
+.src-card,.web-src{border-radius:var(--r2);border:1px solid var(--border);overflow:hidden}
+.src-btn{display:block;width:100%;text-align:left;padding:7px 10px;background:var(--surf2);border:none;color:var(--txt);font-family:var(--f);font-size:12px;font-weight:500;cursor:pointer;transition:background .2s}
+.src-btn:hover{background:var(--surf3)}
+.src-summ{padding:4px 10px 7px;font-size:11.5px;color:var(--muted);line-height:1.4}
+.src-excerpt{padding:10px;font-size:12.5px;color:var(--txt2);line-height:1.6;border-top:1px solid var(--border);background:rgba(0,0,0,.22)}
+.src-excerpt mark{background:rgba(246,180,76,.26);color:var(--txt);border-radius:2px;padding:0 2px}
+.web-lnk{display:block;padding:7px 10px;color:var(--cyan);font-size:12.5px;font-weight:500;text-decoration:none}
+.web-lnk:hover{text-decoration:underline}
+.resp-meta{margin-top:8px;padding-top:8px;border-top:1px solid var(--border);font-size:11px;color:var(--muted)}
+
+/* ── Typing indicator ────────────────────────────────────────────────── */
+@keyframes tbounce{0%,60%,100%{transform:translateY(0);opacity:.4}30%{transform:translateY(-5px);opacity:1}}
+.typing{display:flex;align-items:center;gap:5px;padding:4px 0}
+.typing span{width:7px;height:7px;border-radius:50%;background:var(--cyan);animation:tbounce 1.1s ease-in-out infinite}
+.typing span:nth-child(2){animation-delay:.2s}
+.typing span:nth-child(3){animation-delay:.4s}
+
+/* ── Empty state ─────────────────────────────────────────────────────── */
+.empty{display:flex;flex-direction:column;align-items:center;justify-content:center;flex:1;text-align:center;padding:40px 20px;min-height:280px}
+@keyframes hexPulse{0%,100%{opacity:.18;transform:scale(1)}50%{opacity:.28;transform:scale(1.06)}}
+.empty-hex{font-size:52px;color:var(--cyan);animation:hexPulse 4s ease-in-out infinite;margin-bottom:18px}
+.empty-title{font-size:22px;font-weight:600;letter-spacing:-.015em;margin-bottom:10px}
+.empty-sub{font-size:13.5px;color:var(--muted);max-width:300px;line-height:1.65}
+
+/* ── Error bar ───────────────────────────────────────────────────────── */
+.err{margin:0 14px 8px;padding:10px 14px;border-radius:var(--r2);border:1px solid rgba(239,68,68,.3);background:rgba(239,68,68,.08);color:#FCA5A5;font-size:13px;display:flex;align-items:center;gap:10px;flex-shrink:0}
+.err-x{margin-left:auto;background:none;border:none;color:#FCA5A5;cursor:pointer;font-size:14px;padding:0 4px}
+
+/* ── Chat input ──────────────────────────────────────────────────────── */
+.inp-area{padding:12px 14px 16px;flex-shrink:0;border-top:1px solid var(--border)}
+.inp-wrap{
+  display:flex;align-items:flex-end;gap:10px;
+  background:rgba(7,17,32,.92);border:1px solid var(--border);border-radius:var(--r4);
+  padding:8px 8px 8px 16px;transition:border-color .2s,box-shadow .2s;
+}
+.inp-wrap:focus-within{border-color:rgba(0,212,255,.38);box-shadow:0 0 0 3px rgba(0,212,255,.07)}
+.inp{flex:1;background:none;border:none;color:var(--txt);font-family:var(--f);font-size:14px;line-height:1.5;resize:none;outline:none;max-height:200px;overflow-y:auto;scrollbar-width:thin}
+.inp::placeholder{color:var(--muted)}
+.send{width:38px;height:38px;border-radius:var(--r2);border:1px solid rgba(0,212,255,.28);background:rgba(0,212,255,.1);color:var(--cyan);display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;transition:all .2s}
+.send:hover:not(:disabled){background:rgba(0,212,255,.2);border-color:rgba(0,212,255,.52);box-shadow:var(--glow-c)}
+.send:disabled{opacity:.32;cursor:not-allowed}
+
+/* ── Studio ──────────────────────────────────────────────────────────── */
+.save-sec{padding:0 12px 4px}
+.save-btn{display:flex;align-items:center;gap:8px;width:100%;padding:10px 14px;border-radius:var(--r2);border:1px solid rgba(246,180,76,.28);background:rgba(246,180,76,.06);color:var(--amber);font-family:var(--f);font-size:13px;font-weight:500;cursor:pointer;transition:all .2s}
+.save-btn:hover{background:rgba(246,180,76,.13);border-color:rgba(246,180,76,.45)}
+.notes-empty{padding:22px 14px;text-align:center;color:var(--muted);font-size:13px;display:flex;flex-direction:column;align-items:center;gap:8px}
+.n-ico{font-size:28px;opacity:.28}
+.n-sub{font-size:12px;line-height:1.5;max-width:190px}
+.notes-hdr{display:flex;align-items:center;justify-content:space-between;padding:0 14px;margin-bottom:9px}
+.n-cnt{font-size:12px;font-weight:700;color:var(--muted);background:var(--surf2);border:1px solid var(--border);border-radius:var(--rf);padding:2px 8px}
+.n-list{padding:0 12px;display:flex;flex-direction:column;gap:7px}
+.note{padding:12px;border-radius:var(--r2);border:1px solid var(--border);background:var(--surf2);transition:border-color .2s}
+.note:hover{border-color:rgba(0,212,255,.16)}
+.note-src{font-size:10.5px;font-weight:700;letter-spacing:.08em;color:var(--cyan);text-transform:uppercase;margin-bottom:5px}
+.note-txt{font-size:12.5px;color:var(--txt2);line-height:1.55;margin-bottom:8px}
+.note-ft{display:flex;align-items:center;justify-content:space-between}
+.note-ts{font-size:11px;color:var(--muted)}
+.note-del{background:none;border:none;color:var(--muted);cursor:pointer;font-size:12px;padding:2px 5px;border-radius:3px;transition:color .2s}
+.note-del:hover{color:var(--red)}
+.n-actions{padding:0 12px;display:flex;flex-direction:column;gap:6px}
+.act-btn{width:100%;padding:9px;border-radius:var(--r2);border:1px solid var(--border);background:var(--surf2);color:var(--txt2);font-family:var(--f);font-size:13px;font-weight:500;cursor:pointer;transition:all .2s}
+.act-btn:hover{border-color:var(--border2);background:var(--surf3);color:var(--txt)}
+.act-danger:hover{border-color:rgba(239,68,68,.32);background:rgba(239,68,68,.07);color:#FCA5A5}
+
+/* ── Scrollbars ──────────────────────────────────────────────────────── */
+::-webkit-scrollbar{width:5px;height:5px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:rgba(255,255,255,.08);border-radius:3px}
+::-webkit-scrollbar-thumb:hover{background:rgba(255,255,255,.16)}
+
+/* ── Scan-line overlay (subtle depth effect) ─────────────────────────── */
+.workspace::before{
+  content:'';position:absolute;inset:0;pointer-events:none;z-index:200;
+  background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,.012) 2px,rgba(0,0,0,.012) 4px);
+}
+</style>
+</head>
+
+<body x-data="nexus()" x-init="init()" x-cloak>
+
+<!-- Aurora background -->
+<div class="aurora" aria-hidden="true">
+  <div class="orb orb1"></div>
+  <div class="orb orb2"></div>
+  <div class="orb orb3"></div>
+</div>
+
+<!-- ══ Topbar ════════════════════════════════════════════════════════════ -->
+<header class="topbar">
+  <div class="logo">
+    <div class="logo-hex">⬡</div>
+    <div class="logo-name">NEXUS <span>INTELLIGENCE</span></div>
+  </div>
+  <div class="topbar-right">
+    <div class="pill" :class="{ready: statusReady}">
+      <span class="pill-dot"></span>
+      <span x-text="statusText"></span>
+    </div>
+    <div class="pill">
+      <span x-text="chatHistory.filter(m=>m.role==='assistant').length"></span>&nbsp;answers
+    </div>
+    <div class="pill">
+      <span x-text="notes.length"></span>&nbsp;notes
+    </div>
+  </div>
+</header>
+
+<!-- ══ Workspace ══════════════════════════════════════════════════════════ -->
+<div class="workspace">
+
+  <!-- ── LEFT: Sources ─────────────────────────────────────────────────── -->
+  <aside class="panel panel-l">
+    <div class="p-head"><span class="p-label">SOURCES</span></div>
+
+    <!-- Upload -->
+    <div class="upload" :class="{over:dragging}"
+         @dragover.prevent="dragging=true"
+         @dragleave.prevent="dragging=false"
+         @drop.prevent="onDrop($event)">
+      <input type="file" id="fi" multiple style="display:none"
+             accept=".pdf,.pptx,.xlsx,.xlsm,.csv,.tsv,.txt,.md,.json,.jpg,.jpeg,.png,.tiff,.tif,.bmp,.webp"
+             @change="onFileInput($event)">
+      <div class="upload-ico">⬆</div>
+      <div class="upload-txt">Drop files or <label for="fi" class="upload-lnk">browse</label></div>
+      <div class="upload-sub">PDF · PPTX · Excel · CSV · JSON · Images (OCR)</div>
+    </div>
+
+    <!-- File list -->
+    <div class="file-list" x-show="files.length>0">
+      <template x-for="f in files" :key="f.name">
+        <div class="file-row">
+          <span class="f-ico" x-text="fIcon(f.ext)"></span>
+          <span style="flex:1;font-size:12px;" x-text="f.name"></span>
+        </div>
+      </template>
+    </div>
+
+    <!-- Indexing -->
+    <div class="indexing" x-show="indexing">
+      <div class="spin"></div>
+      <span>Indexing documents…</span>
+    </div>
+
+    <div class="div"></div>
+
+    <!-- Answer Controls -->
+    <div class="ctrl">
+      <div class="ctrl-lbl">Answer Controls</div>
+      <div class="ctrl-grp">
+        <label class="ctrl-sub">Mode</label>
+        <select class="sel" x-model="cfg.mode">
+          <option>Auto</option>
+          <option>Executive Brief</option>
+          <option>Analyst Deep Dive</option>
+          <option>Comparison Matrix</option>
+          <option>Action Plan</option>
+          <option>Risk Review</option>
+          <option>Data Highlights</option>
+          <option>Research Synthesis</option>
+        </select>
+      </div>
+      <div class="ctrl-grp">
+        <label class="ctrl-sub">Audience</label>
+        <select class="sel" x-model="cfg.audience">
+          <option>General</option>
+          <option>Leadership</option>
+          <option>Analyst</option>
+          <option>Product</option>
+          <option>Operations</option>
+          <option>Sales</option>
+        </select>
+      </div>
+      <div class="ctrl-grp">
+        <label class="ctrl-sub">Depth</label>
+        <div class="depth-row">
+          <template x-for="lv in ['Fast','Balanced','Comprehensive']" :key="lv">
+            <button class="d-btn" :class="{on:cfg.depth===lv}" @click="cfg.depth=lv" x-text="lv"></button>
+          </template>
+        </div>
+      </div>
+    </div>
+
+    <div class="div"></div>
+
+    <!-- LLM Provider -->
+    <div class="ctrl">
+      <div class="ctrl-lbl">LLM Provider</div>
+      <div class="prov-row">
+        <button class="p-btn" :class="{on:cfg.provider==='gemini'}" @click="setProvider('gemini')">🤖 Gemini</button>
+        <button class="p-btn" :class="{on:cfg.provider==='ollama'}" @click="setProvider('ollama')">🦙 Ollama</button>
+      </div>
+    </div>
+
+    <div class="div"></div>
+
+    <!-- Web Search -->
+    <button class="web-btn" :class="{on:cfg.web}" @click="cfg.web=!cfg.web">
+      <span>🌐</span>
+      <span x-text="cfg.web ? 'Web Search: ON' : 'Web Search: OFF'"></span>
+    </button>
+
+    <!-- Suggested questions -->
+    <template x-if="questions.length>0">
+      <div>
+        <div class="div"></div>
+        <div class="ctrl">
+          <div class="ctrl-lbl">Suggested Questions</div>
+          <template x-for="q in questions" :key="q">
+            <button class="sug-btn" @click="send(q)" x-text="q"></button>
+          </template>
+        </div>
+      </div>
+    </template>
+  </aside>
+
+  <!-- ── CENTER: Chat ───────────────────────────────────────────────────── -->
+  <main class="panel panel-c">
+    <div class="p-head"><span class="p-label">CHAT</span></div>
+
+    <!-- Prompt Library -->
+    <div class="lib">
+      <button class="lib-toggle" @click="libOpen=!libOpen">
+        <span>Browse prompt library</span>
+        <span class="chev" :class="{r:libOpen}">▾</span>
+      </button>
+      <div class="lib-body" x-show="libOpen" x-transition>
+        <div class="cat-row">
+          <template x-for="c in cats" :key="c">
+            <button class="cat-tab" :class="{on:selCat===c}" @click="selCat=c" x-text="c"></button>
+          </template>
+        </div>
+        <div class="p-grid">
+          <template x-for="p in curPrompts" :key="p">
+            <button class="p-chip" @click="send(p); libOpen=false" x-text="p"></button>
+          </template>
+        </div>
+      </div>
+    </div>
+
+    <!-- Messages -->
+    <div class="msgs" id="msgs">
+      <!-- Empty state -->
+      <div class="empty" x-show="chatHistory.length===0&&!loading">
+        <div class="empty-hex">⬡</div>
+        <div class="empty-title">Nexus Intelligence</div>
+        <div class="empty-sub">Upload documents or enable web search to begin your research session.</div>
+      </div>
+
+      <template x-for="(m,i) in chatHistory" :key="i">
+        <div class="msg" :class="m.role==='user'?'msg-u':'msg-a'">
+          <div class="bubble">
+            <div class="msg-body" x-html="m.role==='assistant'?md(m.content):esc(m.content)"></div>
+
+            <!-- Source cards -->
+            <template x-if="m.role==='assistant'&&m.cards&&m.cards.length>0">
+              <div class="src-cards">
+                <div class="src-lbl">
+                  Sources —
+                  <span x-text="m.cards.filter(c=>!c.web).length"></span>
+                  <template x-if="m.cards.filter(c=>c.web).length>0">
+                    <span> · 🌐 <span x-text="m.cards.filter(c=>c.web).length"></span> web</span>
+                  </template>
+                </div>
+                <div class="src-list">
+                  <template x-for="(c,ci) in m.cards.filter(c=>!c.web)" :key="ci">
+                    <div class="src-card">
+                      <button class="src-btn" @click="toggleSrc(i,ci)" x-text="c.title"></button>
+                      <div class="src-summ" x-text="c.summ"></div>
+                      <div class="src-excerpt" x-show="srcKey===i+'_'+ci" x-html="hi(c.excerpt,m.q)"></div>
+                    </div>
+                  </template>
+                  <template x-for="c in m.cards.filter(c=>c.web)" :key="c.url">
+                    <div class="web-src">
+                      <a class="web-lnk" :href="c.url" target="_blank" x-text="'🌐 '+c.title"></a>
+                      <div class="src-summ" x-text="c.summ"></div>
+                    </div>
+                  </template>
+                </div>
+              </div>
+            </template>
+
+            <!-- Meta line -->
+            <template x-if="m.role==='assistant'&&m.meta">
+              <div class="resp-meta" x-text="'Mode: '+(m.meta.answer_mode||'Auto')+' · '+(m.meta.intent||'document_qa')"></div>
+            </template>
+          </div>
+        </div>
+      </template>
+
+      <!-- Typing indicator -->
+      <div class="msg msg-a" x-show="loading">
+        <div class="bubble">
+          <div class="typing"><span></span><span></span><span></span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Error -->
+    <div class="err" x-show="err">
+      <span x-text="err"></span>
+      <button class="err-x" @click="err=null">✕</button>
+    </div>
+
+    <!-- Input -->
+    <div class="inp-area">
+      <div class="inp-wrap">
+        <textarea class="inp" id="inp" rows="1"
+          placeholder="Ask anything about your documents…"
+          x-model="txt"
+          @keydown.enter.prevent="if(!$event.shiftKey)send(txt)"
+          @input="resize($event)"
+          :disabled="loading"></textarea>
+        <button class="send" @click="send(txt)" :disabled="loading||!txt.trim()">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+  </main>
+
+  <!-- ── RIGHT: Studio ──────────────────────────────────────────────────── -->
+  <aside class="panel panel-r">
+    <div class="p-head"><span class="p-label">STUDIO</span></div>
+
+    <div class="save-sec" x-show="lastRes&&lastRes.response">
+      <button class="save-btn" @click="saveNote()">
+        <span>📌</span><span>Save last response as note</span>
+      </button>
+    </div>
+
+    <div class="div"></div>
+
+    <!-- Notes empty -->
+    <div class="notes-empty" x-show="notes.length===0">
+      <div class="n-ico">📝</div>
+      <div>No notes yet.</div>
+      <div class="n-sub">Save key insights from AI responses to build your research notes.</div>
+    </div>
+
+    <!-- Notes list -->
+    <template x-if="notes.length>0">
+      <div>
+        <div class="notes-hdr">
+          <span class="ctrl-lbl">Saved Notes</span>
+          <span class="n-cnt" x-text="notes.length"></span>
+        </div>
+        <div class="n-list">
+          <template x-for="(n,i) in [...notes].reverse()" :key="notes.length-1-i">
+            <div class="note">
+              <div class="note-src" x-text="n.src||'AI Response'"></div>
+              <div class="note-txt" x-text="n.text.substring(0,200)+(n.text.length>200?'…':'')"></div>
+              <div class="note-ft">
+                <span class="note-ts" x-text="n.ts"></span>
+                <button class="note-del" @click="delNote(notes.length-1-i)">✕</button>
+              </div>
+            </div>
+          </template>
+        </div>
+
+        <div class="div"></div>
+
+        <div class="n-actions">
+          <button class="act-btn" @click="exportNotes()">⬇ Export Notes (.txt)</button>
+          <button class="act-btn act-danger" @click="notes=[]">🗑 Clear all notes</button>
+        </div>
+      </div>
+    </template>
+  </aside>
+
+</div><!-- /workspace -->
+
+<script>
+function nexus() {
+  return {
+    // ── State ─────────────────────────────────────────────────────────────
+    files: [], dragging: false, indexing: false,
+    chatHistory: [], txt: '', loading: false,
+    srcKey: null,
+    notes: [], lastRes: null,
+    questions: [],
+    err: null,
+    statusText: 'Upload files to begin', statusReady: false,
+    libOpen: false, selCat: '', cats: [], lib: {},
+    cfg: { mode:'Auto', audience:'General', depth:'Balanced', web:false, provider:'gemini' },
+
+    // ── Init ──────────────────────────────────────────────────────────────
+    async init() {
+      try {
+        const s = await fetch('/api/state').then(r=>r.json());
+        this.cfg.provider = s.provider || 'gemini';
+        if (s.vectorstore_ready) { this.statusReady=true; this.statusText='Knowledge base ready'; }
+        if (s.suggested_questions?.length) this.questions = s.suggested_questions;
+      } catch(_) {}
+
+      try {
+        const d = await fetch('/api/prompt-library').then(r=>r.json());
+        this.lib = d.library;
+        this.cats = d.categories;
+        this.selCat = this.cats[0] || '';
+      } catch(_) {}
+    },
+
+    get curPrompts() {
+      return this.lib[this.selCat]?.prompts || [];
+    },
+
+    // ── File handling ─────────────────────────────────────────────────────
+    fIcon(ext) {
+      const m={pdf:'📄',xlsx:'📊',xlsm:'📊',csv:'📊',tsv:'📊',pptx:'📑',txt:'📝',md:'📝',json:'🔧',jpg:'🖼',jpeg:'🖼',png:'🖼',tiff:'🖼',tif:'🖼',bmp:'🖼',webp:'🖼'};
+      return m[ext]||'📄';
+    },
+    onDrop(e) { this.dragging=false; if(e.dataTransfer.files.length) this.upload(e.dataTransfer.files); },
+    onFileInput(e) { if(e.target.files.length) this.upload(e.target.files); },
+
+    async upload(fileList) {
+      this.indexing=true; this.err=null;
+      const fd=new FormData();
+      const infos=[];
+      for(const f of fileList){
+        fd.append('files',f);
+        infos.push({name:f.name, ext:f.name.split('.').pop().toLowerCase()});
+      }
+      try {
+        const r = await fetch('/api/upload',{method:'POST',body:fd});
+        if(!r.ok){ const e=await r.json(); throw new Error(e.detail||'Upload failed'); }
+        const d = await r.json();
+        this.files = infos;
+        this.questions = d.questions||[];
+        this.statusReady=true; this.statusText='Knowledge base ready';
+        this.chatHistory=[]; this.lastRes=null; this.srcKey=null;
+      } catch(e){ this.err=e.message; }
+      finally{ this.indexing=false; }
+    },
+
+    // ── Chat ──────────────────────────────────────────────────────────────
+    async send(q) {
+      if(!q?.trim()||this.loading) return;
+      this.txt=''; this.err=null;
+      const el=document.getElementById('inp'); if(el){el.style.height='auto';}
+
+      if(!this.statusReady && !this.cfg.web) {
+        this.err='Upload at least one file, or enable Web Search to ask questions.'; return;
+      }
+
+      this.chatHistory.push({role:'user',content:q});
+      this.loading=true;
+      this.$nextTick(()=>this.scrollDown());
+
+      try {
+        const r = await fetch('/api/chat',{
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({
+            query:q,
+            chat_history: this.chatHistory,
+            answer_mode: this.cfg.mode,
+            audience: this.cfg.audience,
+            response_depth: this.cfg.depth,
+            use_web_search: this.cfg.web,
+            uploaded_file_types: this.files.map(f=>f.ext.toUpperCase()),
+          }),
+        });
+        if(!r.ok){ const e=await r.json(); throw new Error(e.detail||'Query failed'); }
+        const d=await r.json();
+        this.lastRes=d;
+        this.chatHistory.push({
+          role:'assistant',
+          content:d.response||'No answer.',
+          q,
+          cards: this.mkCards(d.documents||[]),
+          meta: d.response_plan||null,
+        });
+      } catch(e){
+        this.err=e.message;
+        this.chatHistory.push({role:'assistant',content:'Error: '+e.message,q,cards:[],meta:null});
+      } finally {
+        this.loading=false;
+        this.$nextTick(()=>this.scrollDown());
+      }
+    },
+
+    // ── Source cards ──────────────────────────────────────────────────────
+    mkCards(docs) {
+      const seen=new Set(), out=[];
+      for(const doc of docs){
+        const md=doc.metadata||{};
+        const txt=(doc.page_content||'').replace(/\s+/g,' ').trim();
+        if(!txt) continue;
+        const key=`${md.source||''}:${md.page||''}:${txt.slice(0,100)}`;
+        if(seen.has(key)) continue; seen.add(key);
+        const words=txt.split(' ');
+        const summ=words.slice(0,20).join(' ')+(words.length>20?'…':'');
+        if(md.content_type==='web_result'){
+          out.push({title:md.title||md.source||'Web',summ,excerpt:txt,web:true,url:md.url||''});
+        } else {
+          const loc=md.page&&md.page!=='N/A'?` — ${md.page}`:'';
+          out.push({title:(md.source||'Unknown')+loc,summ,excerpt:txt,web:false,url:''});
+        }
+      }
+      return out;
+    },
+
+    toggleSrc(mi, ci) {
+      const k=`${mi}_${ci}`;
+      this.srcKey = this.srcKey===k ? null : k;
+    },
+
+    hi(text, query) {
+      const sw=new Set(['about','after','again','being','below','between','could','from','have','into','just','more','most','other','same','some','such','than','that','them','then','there','these','they','this','very','what','when','where','which','while','with','would','your']);
+      let s=this.esc((text||'').replace(/\s+/g,' ').trim());
+      const terms=[...new Set((query||'').toLowerCase().match(/[a-z0-9]{3,}/g)||[])].filter(t=>!sw.has(t));
+      terms.sort((a,b)=>b.length-a.length);
+      for(const t of terms){
+        const re=new RegExp(`(${t.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')})`, 'gi');
+        s=s.replace(re,'<mark>$1</mark>');
+      }
+      return s;
+    },
+
+    // ── Notes ─────────────────────────────────────────────────────────────
+    saveNote(){
+      if(!this.lastRes?.response) return;
+      this.notes.push({
+        text: this.lastRes.response,
+        src: this.lastRes.source||'AI Response',
+        ts: new Date().toLocaleString('en-US',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}),
+      });
+    },
+    delNote(i){ this.notes.splice(i,1); },
+    exportNotes(){
+      const txt=this.notes.map(n=>`[${n.ts}] ${n.src}\n\n${n.text}`).join('\n\n---\n\n');
+      const a=Object.assign(document.createElement('a'),{href:URL.createObjectURL(new Blob([txt],{type:'text/plain'})),download:'nexus_notes.txt'});
+      a.click();
+    },
+
+    // ── Provider ──────────────────────────────────────────────────────────
+    async setProvider(p){
+      this.cfg.provider=p;
+      try{ await fetch('/api/provider',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({provider:p})}); }
+      catch(_){}
+    },
+
+    // ── Rendering helpers ─────────────────────────────────────────────────
+    md(t){ try{ return marked.parse(t||''); }catch(_){ return this.esc(t); } },
+    esc(t){ return (t||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); },
+    scrollDown(){ const el=document.getElementById('msgs'); if(el) el.scrollTop=el.scrollHeight; },
+    resize(e){ const el=e.target; el.style.height='auto'; el.style.height=Math.min(el.scrollHeight,200)+'px'; },
+  };
+}
+</script>
+</body>
+</html>

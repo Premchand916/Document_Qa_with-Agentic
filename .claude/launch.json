@@ -2,10 +2,10 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "Streamlit App",
-      "runtimeExecutable": "streamlit",
-      "runtimeArgs": ["run", "app/main.py", "--server.port", "8501"],
-      "port": 8501
+      "name": "Nexus Intelligence",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "uvicorn", "app.server:app", "--host", "0.0.0.0", "--port", "8000", "--reload"],
+      "port": 8000
     },
     {
       "name": "Ollama Local LLM",

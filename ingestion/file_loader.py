@@ -1,4 +1,5 @@
 import json
+import os
 from io import BytesIO
 from pathlib import Path
 
@@ -17,9 +18,18 @@ SUPPORTED_FILE_TYPES = {
     ".txt": "Text document",
     ".md": "Markdown document",
     ".json": "JSON document",
+    # Image formats (OCR)
+    ".jpg": "JPEG image",
+    ".jpeg": "JPEG image",
+    ".png": "PNG image",
+    ".tiff": "TIFF image",
+    ".tif": "TIFF image",
+    ".bmp": "BMP image",
+    ".webp": "WebP image",
 }
 
 TABULAR_EXTENSIONS = {".xlsx", ".xlsm", ".csv", ".tsv"}
+IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".tiff", ".tif", ".bmp", ".webp"}
 
 
 def _to_bytes(uploaded_file):
@@ -214,6 +224,82 @@ def load_text_document(file_obj, source_name, extension):
     ]
 
 
+def load_image_ocr(file_obj, source_name):
+    """Extract text from an image via OCR.
+
+    Tries pytesseract first (requires system Tesseract install), then falls
+    back to Gemini Vision if GOOGLE_API_KEY is set. Raises ValueError when
+    neither engine is available.
+    """
+    image_bytes = _to_bytes(file_obj)
+    extension = Path(source_name).suffix.lower()
+
+    # ── pytesseract ───────────────────────────────────────────────────────────
+    try:
+        from PIL import Image
+        import pytesseract
+
+        image = Image.open(BytesIO(image_bytes))
+        text = pytesseract.image_to_string(image, config="--psm 1")
+        if text.strip():
+            return [
+                Document(
+                    page_content=text.strip(),
+                    metadata={
+                        "source": source_name,
+                        "page": "1",
+                        "file_type": extension.lstrip("."),
+                        "content_type": "ocr_text",
+                        "ocr_engine": "tesseract",
+                    },
+                )
+            ]
+    except ImportError:
+        pass
+    except Exception:
+        pass
+
+    # ── Gemini Vision fallback ────────────────────────────────────────────────
+    api_key = os.getenv("GOOGLE_API_KEY", "")
+    if api_key:
+        try:
+            import base64
+            import google.generativeai as genai
+
+            genai.configure(api_key=api_key)
+            model = genai.GenerativeModel("gemini-2.0-flash")
+            mime_map = {".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png",
+                        ".tiff": "image/tiff", ".tif": "image/tiff",
+                        ".bmp": "image/bmp", ".webp": "image/webp"}
+            mime_type = mime_map.get(extension, "image/png")
+            img_b64 = base64.b64encode(image_bytes).decode()
+            response = model.generate_content([
+                "Extract all readable text from this image. Return only the extracted text.",
+                {"inline_data": {"mime_type": mime_type, "data": img_b64}},
+            ])
+            text = response.text.strip()
+            if text:
+                return [
+                    Document(
+                        page_content=text,
+                        metadata={
+                            "source": source_name,
+                            "page": "1",
+                            "file_type": extension.lstrip("."),
+                            "content_type": "ocr_text",
+                            "ocr_engine": "gemini",
+                        },
+                    )
+                ]
+        except Exception:
+            pass
+
+    raise ValueError(
+        f"Could not extract text from '{source_name}'. "
+        "Install Tesseract + pytesseract, or set GOOGLE_API_KEY for Gemini Vision OCR."
+    )
+
+
 def load_json_document(file_obj, source_name):
     raw_text = _to_bytes(file_obj).decode("utf-8", errors="ignore")
     parsed = json.loads(raw_text)
@@ -253,6 +339,8 @@ def load_uploaded_file(uploaded_file):
         documents = load_text_document(uploaded_file, source_name, extension)
     elif extension == ".json":
         documents = load_json_document(uploaded_file, source_name)
+    elif extension in IMAGE_EXTENSIONS:
+        documents = load_image_ocr(uploaded_file, source_name)
     else:
         documents = []
 

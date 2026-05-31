@@ -1,5 +1,4 @@
 from pathlib import Path
-import streamlit as st
 from functools import lru_cache
 
 from embeddings.Hugging_face_embedding import get_embedding_model
@@ -43,18 +42,21 @@ def create_vector_store(documents):
     return vectorstore
 
 
-@st.cache_resource
-def load_vector_store():
+def load_vector_store_direct():
+    """Load persisted FAISS index without any framework-specific caching."""
     if not DB_PATH.exists():
         return None
 
     FAISS = _get_faiss_class()
     embedding_model = get_cached_embedding()
 
-    vectorstore = FAISS.load_local(
+    return FAISS.load_local(
         str(DB_PATH),
         embedding_model,
-        allow_dangerous_deserialization=True
+        allow_dangerous_deserialization=True,
     )
 
-    return vectorstore
+
+# Keep legacy name for backward compatibility with the old Streamlit entry point.
+def load_vector_store():
+    return load_vector_store_direct()
