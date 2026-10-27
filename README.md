@@ -134,8 +134,19 @@ Create a .env file:
 
 GOOGLE_API_KEY=your_api_key
 HF_LOCAL_FILES_ONLY=true
+DOCQA_AUTH_MODE=local
 ▶️ Run the Application
-streamlit run app/main.py
+
+```bash
+python -m uvicorn app.server:app --host 127.0.0.1 --port 8000 --no-proxy-headers
+```
+
+Open `http://127.0.0.1:8000`. Local mode is explicitly limited to loopback access.
+Shared access requires a configured authentication proxy; see
+[Step 1 access configuration and limits](docs/STEP1_RESULTS.md) and
+[Step 2 workspace configuration, storage, and legacy-index migration](docs/STEP2_RESULTS.md).
+`app/main.py` is a legacy Streamlit entry point and does not use these FastAPI boundaries.
+
 📊 Example Use Cases
 
 📄 Financial report analysis

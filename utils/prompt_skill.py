@@ -97,7 +97,9 @@ def _build_execution_profile(body):
 def _format_history(chat_history, limit=4):
     lines = []
     for message in (chat_history or [])[-limit:]:
-        role = message.get("role", "user").strip().lower()
+        role = str(message.get("role") or "user").strip().lower()
+        if role not in {"user", "assistant"}:
+            continue
         content = str(message.get("content", "")).strip()
         if content:
             lines.append(f"{role}: {content}")
@@ -108,7 +110,8 @@ def build_prompted_query(query, state):
     skill = get_prompt_skill()
     body = skill.get("body", "")
     if not body:
-        return query
+        history_text = _format_history(state.get("chat_history", []))
+        return f"Question: {query}\nRecent conversation context:\n{history_text}" if history_text else query
 
     execution_profile = _build_execution_profile(body)
     uploaded_file_types = ", ".join(state.get("uploaded_file_types", [])) or "unknown"

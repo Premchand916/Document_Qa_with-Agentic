@@ -119,7 +119,7 @@ Answer:
 """
 
     try:
-        response = invoke_orchestrator(prompt)
+        response = invoke_orchestrator(prompt, provider=state.get("provider"))
     except (LLMConfigurationError, OllamaModelMemoryError) as exc:
         state["response"] = str(exc)
         return state

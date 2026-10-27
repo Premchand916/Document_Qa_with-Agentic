@@ -1,0 +1,162 @@
+import json
+from io import BytesIO
+from unittest.mock import MagicMock, patch
+from zipfile import ZipFile
+
+from tests.support import FIXTURES, OfflineCase, Upload, text_pdf
+
+
+class IngestionTests(OfflineCase):
+    def test_utf8_text_retains_content_and_source(self):
+        from ingestion.file_loader import load_uploaded_file
+        raw = (FIXTURES / "corpus" / "policy_es.txt").read_bytes()
+        docs = load_uploaded_file(Upload("policy_es.txt", raw))
+        self.assertEqual(docs[0].page_content, raw.decode("utf-8"))
+        self.assertEqual(docs[0].metadata["source"], "policy_es.txt")
+
+    def test_real_pdf_parser_extracts_text_and_page(self):
+        from ingestion.file_loader import parse_uploaded_file
+        text = (FIXTURES / "corpus" / "policy.txt").read_text().strip()
+        parsed = parse_uploaded_file(Upload("policy.pdf", text_pdf(text)))
+        docs = parsed.documents
+        self.assertIn("30 days", docs[0].page_content)
+        self.assertEqual(docs[0].metadata["source"], "policy.pdf")
+        self.assertEqual(str(docs[0].metadata["page"]), "1")
+        self.assertEqual(docs[0].metadata["content_type"], "pdf_block")
+        x0, top, x1, bottom = docs[0].metadata["bbox"]
+        self.assertTrue(0 <= x0 < x1 <= 612 and 0 <= top < bottom <= 792)
+        self.assertEqual(parsed.extraction_report["pages_with_coordinates"], [1])
+        self.assertEqual(parsed.extraction_report["pages_without_text"], [])
+
+    def test_csv_preserves_complete_numeric_values_and_provenance(self):
+        from ingestion.file_loader import extract_tabular_assets, load_uploaded_file
+        raw = (FIXTURES / "corpus" / "sales.csv").read_bytes()
+        docs = load_uploaded_file(Upload("sales.csv", raw))
+        assets = extract_tabular_assets(Upload("sales.csv", raw))
+        self.assertEqual(assets[0]["dataframe"]["amount"].sum(), 30)
+        self.assertTrue(all(d.metadata["source"] == "sales.csv" for d in docs))
+        self.assertTrue(any("North" in d.page_content for d in docs))
+
+    def test_json_leaves_keep_escaped_paths_and_values(self):
+        from ingestion.file_loader import load_uploaded_file
+        docs = load_uploaded_file(Upload("policy.json", b'{"policy/a": {"deadline": 30}, "revisions": [30, null]}'))
+        by_path = {doc.metadata["json_pointer"]: doc for doc in docs}
+        self.assertEqual(set(by_path), {"/policy~1a/deadline", "/revisions/0", "/revisions/1"})
+        self.assertIn("30", by_path["/policy~1a/deadline"].page_content)
+        self.assertIn("null", by_path["/revisions/1"].page_content)
+        self.assertTrue(all(doc.metadata["source"] == "policy.json" for doc in docs))
+        from ingestion.semantic_chunker import semantic_chunk_documents
+        chunked = semantic_chunk_documents(docs)
+        ids = {doc.metadata["json_pointer"]: doc.metadata["chunk_id"] for doc in chunked}
+        self.assertNotEqual(ids["/policy~1a/deadline"], ids["/revisions/0"])
+
+    def test_json_node_and_depth_limits(self):
+        from ingestion.file_loader import IngestionLimitError, parse_uploaded_file
+        import ingestion.file_loader as loader
+        with patch.object(loader, "MAX_JSON_NODES", 2):
+            with self.assertRaises(IngestionLimitError):
+                parse_uploaded_file(Upload("wide.json", b'{"a": 1, "b": 2}'))
+        with patch.object(loader, "MAX_JSON_DEPTH", 1):
+            with self.assertRaises(IngestionLimitError):
+                parse_uploaded_file(Upload("deep.json", b'{"a": {"b": 2}}'))
+
+    def test_long_text_splits_and_retains_last_fact_and_metadata(self):
+        from ingestion.semantic_chunker import semantic_chunk_documents
+        from langchain_core.documents import Document
+        docs = semantic_chunk_documents([Document(page_content="alpha details " * 200 + "FINAL_FACT_42", metadata={"source": "long.txt", "page": 1})])
+        self.assertGreater(len(docs), 1)
+        self.assertTrue(any("FINAL_FACT_42" in d.page_content for d in docs))
+        self.assertTrue(all(len(d.page_content) <= 800 for d in docs))
+        self.assertTrue(all(d.metadata["source"] == "long.txt" and d.metadata["page"] == 1 and d.metadata["chunk_id"] for d in docs))
+
+    def test_empty_supported_file_is_rejected(self):
+        from ingestion.file_loader import load_uploaded_file
+        with self.assertRaisesRegex(ValueError, "No readable content"):
+            load_uploaded_file(Upload("empty.txt", b"  "))
+
+    def test_nullable_numeric_csv_stays_numeric_for_calculations(self):
+        from ingestion.file_loader import parse_uploaded_file
+        result = parse_uploaded_file(Upload("missing.csv", b"amount,region\n10,North\n,South\n30,North\n"))
+        frame = result.tabular_assets[0]["dataframe"]
+        self.assertEqual(frame["amount"].sum(), 40)
+        self.assertEqual(str(frame["amount"].dtype), "Int64")
+        self.assertTrue(frame["amount"].isna().iloc[1])
+        self.assertTrue(any("Row 3" in doc.page_content for doc in result.documents))
+
+    def test_tabular_file_is_parsed_once(self):
+        import ingestion.file_loader as loader
+        with patch.object(loader, "_read_delimited_frame", wraps=loader._read_delimited_frame) as reader:
+            result = loader.parse_uploaded_file(Upload("sales.csv", b"amount\n10\n20\n"))
+        self.assertEqual(reader.call_count, 1)
+        self.assertEqual(result.tabular_assets[0]["dataframe"]["amount"].sum(), 30)
+
+    def test_long_json_and_slide_chunks_retain_tail_and_stable_ids(self):
+        from langchain_core.documents import Document
+        from ingestion.semantic_chunker import semantic_chunk_documents
+        raw = [Document(page_content="alpha " * 1000 + "FINAL_FACT_42", metadata={"source": "large.json", "source_id": "source-1", "page": "JSON", "content_type": "json_document"}),
+               Document(page_content="slide " * 1000 + "SLIDE_TAIL", metadata={"source": "deck.pptx", "source_id": "source-2", "page": "Slide 1", "content_type": "slide"})]
+        first = semantic_chunk_documents(raw)
+        second = semantic_chunk_documents(raw)
+        self.assertTrue(any("FINAL_FACT_42" in doc.page_content for doc in first))
+        self.assertTrue(any("SLIDE_TAIL" in doc.page_content for doc in first))
+        self.assertEqual([doc.metadata["chunk_id"] for doc in first], [doc.metadata["chunk_id"] for doc in second])
+        self.assertEqual(len({doc.metadata["chunk_id"] for doc in first}), len(first))
+        self.assertTrue(all(len(doc.page_content.encode("utf-8")) <= 800 for doc in first))
+
+    def test_scanned_pdf_is_reported_as_extraction_failure(self):
+        from ingestion.file_loader import parse_uploaded_file
+        from types import SimpleNamespace
+        pdf = MagicMock()
+        pdf.__enter__.return_value.pages = [SimpleNamespace(extract_text=lambda: None)]
+        with patch("ingestion.file_loader.pdfplumber.open", return_value=pdf):
+            with self.assertRaisesRegex(ValueError, "OCR required"):
+                parse_uploaded_file(Upload("scan.pdf", b"%PDF-1.4"))
+
+    def test_partial_pdf_reports_blank_page_without_dropping_text(self):
+        from types import SimpleNamespace
+        from ingestion.file_loader import parse_uploaded_file
+        pdf = MagicMock()
+        pdf.__enter__.return_value.pages = [SimpleNamespace(extract_text=lambda: "Alpha policy"), SimpleNamespace(extract_text=lambda: None)]
+        with patch("ingestion.file_loader.pdfplumber.open", return_value=pdf):
+            result = parse_uploaded_file(Upload("partial.pdf", b"%PDF-1.4"))
+        self.assertEqual(len(result.documents), 1)
+        self.assertIn("page 2", result.warnings[0])
+        self.assertEqual(result.extraction_report["pages_without_text"], [2])
+        self.assertEqual(result.extraction_report["text_pages"], 1)
+
+    def test_pdf_text_blocks_keep_line_ranges_and_stop_at_limit(self):
+        from types import SimpleNamespace
+        import ingestion.file_loader as loader
+        lines = [{"text": f"policy line {index}", "x0": 50.0, "top": float(index * 12),
+                  "x1": 180.0, "bottom": float(index * 12 + 10)} for index in range(9)]
+        page = SimpleNamespace(extract_text_lines=lambda **kwargs: lines, width=612, height=792)
+        pdf = MagicMock()
+        pdf.__enter__.return_value.pages = [page]
+        with patch.object(loader.pdfplumber, "open", return_value=pdf):
+            parsed = loader.parse_uploaded_file(Upload("lines.pdf", b"%PDF-1.4"))
+        self.assertEqual([(doc.metadata["line_start"], doc.metadata["line_end"]) for doc in parsed.documents],
+                         [(1, 8), (9, 9)])
+        self.assertEqual(parsed.documents[1].metadata["bbox"], [50.0, 96.0, 180.0, 106.0])
+        with patch.object(loader.pdfplumber, "open", return_value=pdf), patch.object(loader, "MAX_PDF_TEXT_LINES", 8):
+            with self.assertRaises(loader.IngestionLimitError):
+                loader.parse_uploaded_file(Upload("lines.pdf", b"%PDF-1.4"))
+
+    def test_table_and_archive_expansion_limits(self):
+        from ingestion.file_loader import IngestionLimitError, parse_uploaded_file
+        with patch("ingestion.file_loader.MAX_TABLE_ROWS", 2):
+            with self.assertRaises(IngestionLimitError):
+                parse_uploaded_file(Upload("large.csv", b"amount\n1\n2\n3\n"))
+        buffer = BytesIO()
+        with ZipFile(buffer, "w") as archive:
+            archive.writestr("large.xml", "x" * 100)
+        with patch("ingestion.file_loader.MAX_ARCHIVE_EXPANDED_BYTES", 50):
+            with self.assertRaises(IngestionLimitError):
+                parse_uploaded_file(Upload("large.xlsx", buffer.getvalue()))
+
+    def test_csv_reader_stops_after_limit_plus_one_row(self):
+        import ingestion.file_loader as loader
+        raw = Upload("large.csv", b"amount\n1\n2\n3\n4\n")
+        with patch.object(loader, "MAX_TABLE_ROWS", 2), patch.object(loader.pd, "read_csv", wraps=loader.pd.read_csv) as reader:
+            with self.assertRaises(loader.IngestionLimitError):
+                loader.parse_uploaded_file(raw)
+        self.assertEqual(reader.call_args.kwargs["nrows"], 3)

@@ -7,8 +7,10 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-<script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<script defer src="/static/vendor/alpine-3.17.5.min.js"></script>
+<script src="/static/vendor/marked-18.1.2.umd.js"></script>
+<script src="/static/vendor/dompurify-3.4.17.min.js"></script>
+<script src="/static/safe-render.js"></script>
 <style>
 /* ── Reset & tokens ─────────────────────────────────────────────────── */
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -73,6 +75,11 @@ body{display:flex;flex-direction:column;position:relative;z-index:1}
 .panel-c{display:flex;flex-direction:column;overflow:hidden}
 .p-head{padding:14px 16px 8px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
 .p-label{font-size:11px;font-weight:700;letter-spacing:.16em;color:var(--cyan)}
+.thread-controls{display:flex;align-items:center;gap:6px;min-width:0}
+.thread-select,.thread-new{border:1px solid var(--border);border-radius:var(--r2);background:var(--surf2);color:var(--txt2);font:inherit;font-size:11px;padding:5px 7px}
+.thread-select{max-width:160px;min-width:0}
+.thread-new{cursor:pointer;white-space:nowrap}
+.thread-new:disabled,.thread-select:disabled{opacity:.5;cursor:not-allowed}
 
 /* ── Upload area ─────────────────────────────────────────────────────── */
 .upload{
@@ -224,6 +231,7 @@ body{display:flex;flex-direction:column;position:relative;z-index:1}
 
 /* ── Error bar ───────────────────────────────────────────────────────── */
 .err{margin:0 14px 8px;padding:10px 14px;border-radius:var(--r2);border:1px solid rgba(239,68,68,.3);background:rgba(239,68,68,.08);color:#FCA5A5;font-size:13px;display:flex;align-items:center;gap:10px;flex-shrink:0}
+.warn{margin:0 14px 8px;padding:10px 14px;border-radius:var(--r2);border:1px solid rgba(246,180,76,.3);background:rgba(246,180,76,.08);color:var(--amber);font-size:13px;flex-shrink:0}
 .err-x{margin-left:auto;background:none;border:none;color:#FCA5A5;cursor:pointer;font-size:14px;padding:0 4px}
 
 /* ── Chat input ──────────────────────────────────────────────────────── */
@@ -277,7 +285,7 @@ body{display:flex;flex-direction:column;position:relative;z-index:1}
 </style>
 </head>
 
-<body x-data="nexus()" x-init="init()" x-cloak>
+<body x-data="nexus()" x-cloak>
 
 <!-- Aurora background -->
 <div class="aurora" aria-hidden="true">
@@ -313,6 +321,14 @@ body{display:flex;flex-direction:column;position:relative;z-index:1}
   <aside class="panel panel-l">
     <div class="p-head"><span class="p-label">SOURCES</span></div>
 
+    <div style="padding:12px 16px">
+      <label for="workspace-select" class="p-label">WORKSPACE</label>
+      <select id="workspace-select" class="sel" style="width:100%;margin-top:6px"
+              :value="workspaceId" @change="switchWorkspace($event.target.value)"
+              :disabled="!canSelectWorkspace || busy">
+        <template x-for="workspace in workspaces" :key="workspace"><option :value="workspace" x-text="workspace"></option></template>
+      </select>
+    </div>
     <!-- Upload -->
     <div class="upload" :class="{over:dragging}"
          @dragover.prevent="dragging=true"
@@ -322,7 +338,7 @@ body{display:flex;flex-direction:column;position:relative;z-index:1}
              accept=".pdf,.pptx,.xlsx,.xlsm,.csv,.tsv,.txt,.md,.json,.jpg,.jpeg,.png,.tiff,.tif,.bmp,.webp"
              @change="onFileInput($event)">
       <div class="upload-ico">⬆</div>
-      <div class="upload-txt">Drop files or <label for="fi" class="upload-lnk">browse</label></div>
+      <div class="upload-txt">Drop files or <button type="button" class="upload-lnk" style="background:none;border:0;font:inherit" @click="document.getElementById('fi').click()">browse</button></div>
       <div class="upload-sub">PDF · PPTX · Excel · CSV · JSON · Images (OCR)</div>
     </div>
 
@@ -387,8 +403,8 @@ body{display:flex;flex-direction:column;position:relative;z-index:1}
     <div class="ctrl">
       <div class="ctrl-lbl">LLM Provider</div>
       <div class="prov-row">
-        <button class="p-btn" :class="{on:cfg.provider==='gemini'}" @click="setProvider('gemini')">🤖 Gemini</button>
-        <button class="p-btn" :class="{on:cfg.provider==='ollama'}" @click="setProvider('ollama')">🦙 Ollama</button>
+        <button class="p-btn" :class="{on:cfg.provider==='gemini'}" :aria-pressed="cfg.provider==='gemini'" :disabled="busy" @click="setProvider('gemini')">🤖 Gemini</button>
+        <button class="p-btn" :class="{on:cfg.provider==='ollama'}" :aria-pressed="cfg.provider==='ollama'" :disabled="busy" @click="setProvider('ollama')">🦙 Ollama</button>
       </div>
     </div>
 
@@ -416,7 +432,18 @@ body{display:flex;flex-direction:column;position:relative;z-index:1}
 
   <!-- ── CENTER: Chat ───────────────────────────────────────────────────── -->
   <main class="panel panel-c">
-    <div class="p-head"><span class="p-label">CHAT</span></div>
+    <div class="p-head">
+      <span class="p-label">CHAT</span>
+      <div class="thread-controls">
+        <select class="thread-select" aria-label="Conversation" :value="conversationId" :disabled="busy" @change="openConversation($event.target.value)">
+          <option value="">New conversation</option>
+          <template x-for="thread in conversations" :key="thread.conversation_id">
+            <option :value="thread.conversation_id" x-text="thread.title"></option>
+          </template>
+        </select>
+        <button class="thread-new" type="button" :disabled="busy" @click="newConversation()">New chat</button>
+      </div>
+    </div>
 
     <!-- Prompt Library -->
     <div class="lib">
@@ -472,7 +499,7 @@ body{display:flex;flex-direction:column;position:relative;z-index:1}
                   </template>
                   <template x-for="c in m.cards.filter(c=>c.web)" :key="c.url">
                     <div class="web-src">
-                      <a class="web-lnk" :href="c.url" target="_blank" x-text="'🌐 '+c.title"></a>
+                      <a class="web-lnk" :href="safeUrl(c.url)" target="_blank" rel="noopener noreferrer" x-text="'🌐 '+c.title"></a>
                       <div class="src-summ" x-text="c.summ"></div>
                     </div>
                   </template>
@@ -483,6 +510,9 @@ body{display:flex;flex-direction:column;position:relative;z-index:1}
             <!-- Meta line -->
             <template x-if="m.role==='assistant'&&m.meta">
               <div class="resp-meta" x-text="'Mode: '+(m.meta.answer_mode||'Auto')+' · '+(m.meta.intent||'document_qa')"></div>
+            </template>
+            <template x-if="m.role==='assistant'&&m.stale">
+              <div class="resp-meta">Answer cites a previous corpus version.</div>
             </template>
           </div>
         </div>
@@ -497,9 +527,10 @@ body{display:flex;flex-direction:column;position:relative;z-index:1}
     </div>
 
     <!-- Error -->
-    <div class="err" x-show="err">
+    <div class="warn" role="status" x-show="uploadWarnings.length" x-text="uploadWarnings.join(' ')" aria-live="polite"></div>
+    <div class="err" role="alert" x-show="err">
       <span x-text="err"></span>
-      <button class="err-x" @click="err=null">✕</button>
+      <button class="err-x" aria-label="Dismiss error" @click="err=null">✕</button>
     </div>
 
     <!-- Input -->
@@ -510,8 +541,8 @@ body{display:flex;flex-direction:column;position:relative;z-index:1}
           x-model="txt"
           @keydown.enter.prevent="if(!$event.shiftKey)send(txt)"
           @input="resize($event)"
-          :disabled="loading"></textarea>
-        <button class="send" @click="send(txt)" :disabled="loading||!txt.trim()">
+          :disabled="busy"></textarea>
+        <button class="send" aria-label="Send question" @click="send(txt)" :disabled="busy||!txt.trim()">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
             <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
           </svg>
@@ -575,8 +606,9 @@ body{display:flex;flex-direction:column;position:relative;z-index:1}
 function nexus() {
   return {
     // ── State ─────────────────────────────────────────────────────────────
-    files: [], dragging: false, indexing: false,
-    chatHistory: [], txt: '', loading: false,
+    workspaceId: "", workspaces: [], canSelectWorkspace: false, switching: true, providerChanging: false,
+    files: [], dragging: false, indexing: false, uploadWarnings: [],
+    chatHistory: [], conversations: [], conversationId: '', pendingSubmission: null, corpusVersion: null, txt: '', loading: false,
     srcKey: null,
     notes: [], lastRes: null,
     questions: [],
@@ -588,18 +620,87 @@ function nexus() {
     // ── Init ──────────────────────────────────────────────────────────────
     async init() {
       try {
-        const s = await fetch('/api/state').then(r=>r.json());
-        this.cfg.provider = s.provider || 'gemini';
-        if (s.vectorstore_ready) { this.statusReady=true; this.statusText='Knowledge base ready'; }
-        if (s.suggested_questions?.length) this.questions = s.suggested_questions;
-      } catch(_) {}
+        const r = await fetch('/api/workspaces');
+        if (!r.ok) throw new Error(await this.apiError(r, 'Could not load workspaces'));
+        const data = await r.json();
+        this.workspaceId = data.workspace_id;
+        this.workspaces = data.workspaces;
+        this.canSelectWorkspace = data.can_select;
+        await this.loadWorkspace();
+      } catch(e) { this.err=e.message; }
+      finally { this.switching=false; }
 
       try {
-        const d = await fetch('/api/prompt-library').then(r=>r.json());
+        const r = await this.apiFetch('/api/prompt-library');
+        if (!r.ok) throw new Error(await this.apiError(r, 'Could not load prompt library'));
+        const d = await r.json();
         this.lib = d.library;
         this.cats = d.categories;
         this.selCat = this.cats[0] || '';
-      } catch(_) {}
+      } catch(e) { this.err=e.message; }
+    },
+
+    get busy() { return this.loading || this.indexing || this.switching || this.providerChanging; },
+    apiFetch(url, options={}) {
+      const headers = new Headers(options.headers || {});
+      if (this.canSelectWorkspace && this.workspaceId) headers.set('X-Workspace-ID', this.workspaceId);
+      return fetch(url, {...options, headers});
+    },
+    async loadWorkspace() {
+      const r = await this.apiFetch('/api/state');
+      if (!r.ok) throw new Error(await this.apiError(r, 'Could not load workspace'));
+      const s = await r.json();
+      this.cfg.provider = s.provider;
+      this.statusReady = s.vectorstore_ready || s.tabular_ready;
+      this.statusText = this.statusReady ? 'Knowledge base ready' : 'Upload files to begin';
+      this.questions = s.suggested_questions || [];
+      this.files = (s.sources || []).map(source => ({name: source.name, ext: source.name.split('.').pop().toLowerCase()}));
+      this.uploadWarnings = s.warnings || [];
+      this.corpusVersion = s.corpus_version || null;
+      await this.refreshConversations(true);
+      if (s.legacy_index_detected) this.err='An older index was found. Re-upload the original files to use this workspace.';
+    },
+    async refreshConversations(openLatest=false) {
+      const r=await this.apiFetch('/api/conversations');
+      if(!r.ok) throw new Error(await this.apiError(r, 'Could not load conversations'));
+      this.conversations=(await r.json()).conversations||[];
+      if(openLatest) {
+        if(this.conversations.length) await this.openConversation(this.conversations[0].conversation_id);
+        else this.newConversation();
+      }
+    },
+    async openConversation(id) {
+      if(this.loading || this.indexing) return;
+      if(!id) { this.newConversation(); return; }
+      const r=await this.apiFetch('/api/conversations/'+encodeURIComponent(id));
+      if(!r.ok) { this.err=await this.apiError(r, 'Could not open conversation'); return; }
+      const data=await r.json();
+      this.conversationId=data.conversation_id;
+      this.pendingSubmission=null;
+      let question='';
+      this.chatHistory=(data.messages||[]).map(m=>{
+        if(m.role==='user') { question=m.content; return {role:'user',content:m.content}; }
+        const response=m.response||{};
+        return {role:'assistant',content:m.content,q:question,cards:this.mkCards(response.documents||[]),
+                meta:response.response_plan||null,corpusVersion:response.corpus_version,
+                stale:!!response.corpus_version&&!!this.corpusVersion&&response.corpus_version!==this.corpusVersion};
+      });
+      this.lastRes=null; this.srcKey=null;
+      this.$nextTick(()=>this.scrollDown());
+    },
+    newConversation() {
+      this.conversationId=''; this.pendingSubmission=null; this.chatHistory=[]; this.lastRes=null; this.srcKey=null; this.err=null;
+    },
+    async switchWorkspace(workspace) {
+      if (this.busy || workspace === this.workspaceId || !this.workspaces.includes(workspace)) return;
+      this.switching=true;
+      this.workspaceId=workspace;
+      this.chatHistory=[]; this.conversationId=''; this.pendingSubmission=null; this.conversations=[]; this.notes=[]; this.lastRes=null; this.srcKey=null;
+      this.txt=''; this.files=[]; this.questions=[]; this.err=null; this.uploadWarnings=[];
+      this.statusReady=false; this.statusText='Loading workspace';
+      try { await this.loadWorkspace(); }
+      catch(e) { this.err=e.message; this.statusText='Workspace unavailable'; }
+      finally { this.switching=false; }
     },
 
     get curPrompts() {
@@ -615,7 +716,8 @@ function nexus() {
     onFileInput(e) { if(e.target.files.length) this.upload(e.target.files); },
 
     async upload(fileList) {
-      this.indexing=true; this.err=null;
+      if (this.busy) return;
+      this.indexing=true; this.err=null; this.uploadWarnings=[];
       const fd=new FormData();
       const infos=[];
       for(const f of fileList){
@@ -623,20 +725,23 @@ function nexus() {
         infos.push({name:f.name, ext:f.name.split('.').pop().toLowerCase()});
       }
       try {
-        const r = await fetch('/api/upload',{method:'POST',body:fd});
-        if(!r.ok){ const e=await r.json(); throw new Error(e.detail||'Upload failed'); }
+        const r = await this.apiFetch('/api/upload',{method:'POST',body:fd});
+        if(!r.ok) throw new Error(await this.apiError(r, 'Upload failed'));
         const d = await r.json();
         this.files = infos;
         this.questions = d.questions||[];
+        this.uploadWarnings = d.warnings||[];
         this.statusReady=true; this.statusText='Knowledge base ready';
-        this.chatHistory=[]; this.lastRes=null; this.srcKey=null;
+        this.corpusVersion=d.corpus_version;
+        for(const m of this.chatHistory) if(m.role==='assistant'&&m.corpusVersion&&m.corpusVersion!==this.corpusVersion) m.stale=true;
+        this.lastRes=null; this.srcKey=null;
       } catch(e){ this.err=e.message; }
       finally{ this.indexing=false; }
     },
 
     // ── Chat ──────────────────────────────────────────────────────────────
     async send(q) {
-      if(!q?.trim()||this.loading) return;
+      if(!q?.trim()||this.busy) return;
       this.txt=''; this.err=null;
       const el=document.getElementById('inp'); if(el){el.style.height='auto';}
 
@@ -649,12 +754,19 @@ function nexus() {
       this.$nextTick(()=>this.scrollDown());
 
       try {
-        const r = await fetch('/api/chat',{
+        if(!this.pendingSubmission || this.pendingSubmission.query!==q ||
+           this.pendingSubmission.conversationId!==this.conversationId) {
+          this.pendingSubmission={query:q,conversationId:this.conversationId,
+            key:globalThis.crypto?.randomUUID?.()||`${Date.now()}-${Math.random().toString(36).slice(2)}`};
+        }
+        const idempotencyKey=this.pendingSubmission.key;
+        const r = await this.apiFetch('/api/chat',{
           method:'POST',
           headers:{'Content-Type':'application/json'},
           body: JSON.stringify({
             query:q,
-            chat_history: this.chatHistory,
+            conversation_id:this.conversationId||null,
+            idempotency_key:idempotencyKey,
             answer_mode: this.cfg.mode,
             audience: this.cfg.audience,
             response_depth: this.cfg.depth,
@@ -662,8 +774,10 @@ function nexus() {
             uploaded_file_types: this.files.map(f=>f.ext.toUpperCase()),
           }),
         });
-        if(!r.ok){ const e=await r.json(); throw new Error(e.detail||'Query failed'); }
+        if(!r.ok) throw new Error(await this.apiError(r, 'Query failed'));
         const d=await r.json();
+        this.conversationId=d.conversation_id;
+        this.pendingSubmission=null;
         this.lastRes=d;
         this.chatHistory.push({
           role:'assistant',
@@ -671,10 +785,14 @@ function nexus() {
           q,
           cards: this.mkCards(d.documents||[]),
           meta: d.response_plan||null,
+          corpusVersion:d.corpus_version,
         });
+        try { await this.refreshConversations(); }
+        catch(e) { this.err=e.message; }
       } catch(e){
         this.err=e.message;
-        this.chatHistory.push({role:'assistant',content:'Error: '+e.message,q,cards:[],meta:null});
+        if(this.chatHistory.at(-1)?.role==='user') this.chatHistory.pop();
+        this.txt=q;
       } finally {
         this.loading=false;
         this.$nextTick(()=>this.scrollDown());
@@ -737,14 +855,27 @@ function nexus() {
 
     // ── Provider ──────────────────────────────────────────────────────────
     async setProvider(p){
-      this.cfg.provider=p;
-      try{ await fetch('/api/provider',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({provider:p})}); }
-      catch(_){}
+      if (this.busy) return;
+      this.providerChanging=true;
+      try{
+        const r=await this.apiFetch('/api/provider',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({provider:p})});
+        if(!r.ok) throw new Error(await this.apiError(r, 'Provider change failed'));
+        this.cfg.provider=p;
+      } catch(e){ this.err=e.message; }
+      finally { this.providerChanging=false; }
     },
 
     // ── Rendering helpers ─────────────────────────────────────────────────
-    md(t){ try{ return marked.parse(t||''); }catch(_){ return this.esc(t); } },
-    esc(t){ return (t||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); },
+    async apiError(r,fallback){
+      try{
+        const e=await r.json();
+        const message=typeof e.detail==='string'?e.detail:fallback;
+        return e.request_id?`${message} (reference ${e.request_id})`:message;
+      } catch(_){ return fallback; }
+    },
+    md(t){ return SafeRender.markdown(t); },
+    safeUrl(t){ return SafeRender.safeUrl(t); },
+    esc(t){ return SafeRender.escape(t); },
     scrollDown(){ const el=document.getElementById('msgs'); if(el) el.scrollTop=el.scrollHeight; },
     resize(e){ const el=e.target; el.style.height='auto'; el.style.height=Math.min(el.scrollHeight,200)+'px'; },
   };

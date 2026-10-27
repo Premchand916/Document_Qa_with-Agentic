@@ -29,23 +29,32 @@ def _should_use_local_files_only(model_name):
     return True
 
 
-@lru_cache(maxsize=1)
-def get_embedding_model():
-    model_name = os.getenv("EMBEDDING_MODEL", "sentence-transformers/all-MiniLM-L6-v2")
-    local_files_only = _should_use_local_files_only(model_name)
-
+@lru_cache(maxsize=4)
+def _load_embedding_model(model_name, local_files_only, revision):
     try:
+        model_kwargs = {"local_files_only": local_files_only}
+        if revision:
+            model_kwargs["revision"] = revision
         embeddings = HuggingFaceEmbeddings(
             model_name=model_name,
-            cache_folder=str(MODEL_CACHE_DIR),
-            model_kwargs={"local_files_only": local_files_only}
+            cache_folder=str(MODEL_CACHE_DIR) if _cached_model_exists(model_name) else None,
+            model_kwargs=model_kwargs,
         )
     except Exception as exc:
         raise RuntimeError(
             f"Unable to initialize embedding model '{model_name}'. "
-            f"Expected cache folder: {MODEL_CACHE_DIR}. "
-            "Download the model into that folder, or set EMBEDDING_MODEL to a local cached model path. "
+            f"Checked project cache {MODEL_CACHE_DIR} and the standard Hugging Face cache. "
+            "Cache the model locally, or set EMBEDDING_MODEL to a local model path. "
             "If you want automatic downloads, set HF_LOCAL_FILES_ONLY=false before starting the app."
         ) from exc
 
     return embeddings
+
+
+def get_embedding_model():
+    model_name = os.getenv("EMBEDDING_MODEL", "sentence-transformers/all-MiniLM-L6-v2")
+    return _load_embedding_model(model_name, _should_use_local_files_only(model_name),
+                                 os.getenv("EMBEDDING_REVISION", ""))
+
+
+get_embedding_model.cache_clear = _load_embedding_model.cache_clear

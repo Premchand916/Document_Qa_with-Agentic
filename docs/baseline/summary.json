@@ -1,0 +1,41 @@
+{
+  "generated_at_utc": "2026-10-26T06:02:36.511013+00:00",
+  "stages": [
+    {
+      "name": "tests",
+      "exit_code": 0,
+      "seconds": 3.114,
+      "tests_run": 28
+    },
+    {
+      "name": "diagnostics",
+      "exit_code": 0,
+      "seconds": 3.221
+    },
+    {
+      "name": "environment",
+      "exit_code": 0,
+      "seconds": 0.185
+    }
+  ],
+  "diagnostic_summary": {
+    "reproduced": 25,
+    "not_reproduced": 0,
+    "control_passed": 1,
+    "control_failed": 0,
+    "probe_error": 0
+  },
+  "fixture_sha256": {
+    "tests/fixtures/audit_ownership.json": "5f5f23a000b2cf99c5d5793cea5febbbdebfc7e7b96a0bba321b9d16cd724de6",
+    "tests/fixtures/corpus/hostile.txt": "448dfa077d2146eb3c9e9b4b43767dfbb68d287688baa4fdff91e455fdf5969e",
+    "tests/fixtures/corpus/missing.csv": "ec39f3da60f17636ab286aea59e160e87da3fa7bec9680b9a194d7919c2c2a3f",
+    "tests/fixtures/corpus/policy.txt": "2fb0eeb1afbe5d15abd4c1de21219e62c2f49b6b3538aaa66856c3bc0b9eea0e",
+    "tests/fixtures/corpus/policy_copy.txt": "2fb0eeb1afbe5d15abd4c1de21219e62c2f49b6b3538aaa66856c3bc0b9eea0e",
+    "tests/fixtures/corpus/policy_es.txt": "c70ca59829b06051a692b38468cb4e398be19a5b7258ce90948d2a2898e572b6",
+    "tests/fixtures/corpus/policy_old.txt": "cc18ce3b49fa3633440c0f35a9d50cdab73e83931b8fd53f36a1d2f29128114a",
+    "tests/fixtures/corpus/sales.csv": "74216cbed47d974390dda2f8a29f43571a97a01fa56f9662ace55617317e32bd",
+    "tests/fixtures/corpus/second.csv": "01999f679181986fac99ed01da7a60a3e1f2eed20e57e52cde43c9d8f31ffab4",
+    "tests/fixtures/evaluation.json": "63eff8834b8474653b2c16650298c929eec643fa68cc121b4e76a6bcdf30f1df"
+  },
+  "interpretation": "Tests protect existing valid behavior. Reproduced diagnostics remain unresolved defects/limitations. No live model quality measured."
+}

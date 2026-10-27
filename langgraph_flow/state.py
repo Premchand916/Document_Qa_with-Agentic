@@ -20,6 +20,9 @@ class AgentState(TypedDict, total=False):
     task: str                           # Planner-derived task description
     document_type: str                  # Detected document type (pdf, excel, pptx, …)
     use_tool: bool                      # If True, route to dataframe_tool; else retriever
+    tool_plan: Dict[str, Any]           # Validated table operation/source/filter plan
+    tool_result: Dict[str, Any]         # Exact computed result and row provenance
+    result_status: str                  # answered | needs_clarification
     response_plan: Dict[str, Any]       # Strategy dict from response_planner
     draft_answer: str                   # Intermediate draft (react_agent → writer_agent)
 
@@ -27,6 +30,9 @@ class AgentState(TypedDict, total=False):
     vectorstore: Any                    # FAISS vectorstore instance
     use_web_search: bool                # If True, bypass docs and query DuckDuckGo
     chat_history: List[Dict[str, str]]  # Prior turns [{"role": ..., "content": ...}]
+    provider: str
+    corpus_version: Optional[str]
+    request_context: Dict[str, Any]    # Server-authenticated identity, workspace and request ID
     answer_mode: str                    # "Auto" | "Concise" | "Detailed" | "Bullet Points"
     audience: str                       # "General" | "Technical" | "Executive"
     response_depth: str                 # "Standard" | "Deep" | "Quick"

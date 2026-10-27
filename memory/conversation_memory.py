@@ -1,3 +1,4 @@
+from copy import deepcopy
 from dataclasses import dataclass, field
 
 
@@ -16,7 +17,7 @@ class SimpleConversationMemory:
 
     def load_memory_variables(self, _inputs=None):
         if self.return_messages:
-            return {self.memory_key: list(self.messages)}
+            return {self.memory_key: deepcopy(self.messages)}
 
         transcript = "\n".join(
             f"{message.get('role', 'user')}: {message.get('content', '')}"

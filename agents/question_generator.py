@@ -95,7 +95,7 @@ def _parse_question_response(response):
     return clean_questions[:5]
 
 
-def generate_questions(llm_or_documents, context=None):
+def generate_questions(llm_or_documents, context=None, *, provider=None):
     if context is not None:
         prompt = f"""
 Based on the following document, generate 5 meaningful questions.
@@ -107,7 +107,7 @@ Return ONLY a clean list of questions.
 """
         if hasattr(llm_or_documents, "invoke"):
             return _parse_question_response(llm_or_documents.invoke(prompt))
-        return _parse_question_response(invoke_orchestrator(prompt))
+        return _parse_question_response(invoke_orchestrator(prompt, provider=provider))
 
     documents = llm_or_documents
     if not documents:
@@ -137,7 +137,7 @@ Document set excerpts:
 """
 
     try:
-        questions = _parse_question_response(invoke_orchestrator(prompt))
+        questions = _parse_question_response(invoke_orchestrator(prompt, provider=provider))
     except Exception:
         questions = []
 

@@ -1,0 +1,332 @@
+{
+  "generated_at_utc": "2026-10-26T16:46:42.354305+00:00",
+  "scope": "Synthetic offline probes; model calls stubbed; real handlers, graph and FAISS persistence where described; no production data",
+  "workflow_traces": {
+    "document": {
+      "executed_nodes": [
+        "entry",
+        "intent_router",
+        "response_planner",
+        "planner",
+        "retriever",
+        "qa_agent"
+      ],
+      "model_calls": 3,
+      "checkpointer_configured": false
+    },
+    "table": {
+      "executed_nodes": [
+        "entry",
+        "intent_router",
+        "response_planner",
+        "planner",
+        "dataframe_tool"
+      ],
+      "model_calls": 2,
+      "checkpointer_configured": false
+    },
+    "web": {
+      "executed_nodes": [
+        "entry",
+        "web_search",
+        "qa_agent"
+      ],
+      "model_calls": 1,
+      "checkpointer_configured": false
+    }
+  },
+  "versions": {
+    "fastapi": "0.136.3",
+    "langgraph": "1.2.2",
+    "faiss-cpu": "1.14.2",
+    "pandas": "3.0.3",
+    "sentence-transformers": "5.5.1",
+    "langchain-community": "0.4.2",
+    "langchain-huggingface": "1.2.2"
+  },
+  "summary": {
+    "reproduced": 22,
+    "not_reproduced": 3,
+    "control_passed": 1,
+    "control_failed": 0,
+    "probe_error": 0
+  },
+  "results": [
+    {
+      "id": "M01",
+      "title": "Conversation history disappears without a prompt profile",
+      "status": "reproduced",
+      "source": "utils/prompt_skill.py:107",
+      "observed": {
+        "prompt": "What about its deadline?"
+      }
+    },
+    {
+      "id": "M02",
+      "title": "Malformed history role produces HTTP 500 when profile is enabled",
+      "status": "not_reproduced",
+      "source": "utils/prompt_skill.py:97",
+      "observed": {
+        "status": 422
+      }
+    },
+    {
+      "id": "M03",
+      "title": "Memory factory does not recover a previous conversation",
+      "status": "reproduced",
+      "source": "memory/conversation_memory.py:51",
+      "observed": {
+        "first_messages": 1,
+        "new_instance_messages": 0
+      }
+    },
+    {
+      "id": "M04",
+      "title": "Returned memory messages allow mutation of the stored history",
+      "status": "reproduced",
+      "source": "memory/conversation_memory.py:17",
+      "observed": {
+        "stored_content": "changed"
+      }
+    },
+    {
+      "id": "A01",
+      "title": "A CSV routes an unrelated PDF question to the table tool",
+      "status": "reproduced",
+      "source": "agents/planner_agent.py:14",
+      "observed": {
+        "use_tool": true
+      }
+    },
+    {
+      "id": "A02",
+      "title": "A question about the second table computes on the first table",
+      "status": "reproduced",
+      "source": "agents/dataframe_tool.py:76",
+      "observed": {
+        "source": "first.csv (Data)",
+        "answer": "Total:\n- amount: 10",
+        "expected_amount": 99
+      }
+    },
+    {
+      "id": "A03",
+      "title": "A filtered total silently includes excluded rows",
+      "status": "reproduced",
+      "source": "agents/dataframe_tool.py:18",
+      "observed": {
+        "expected": 10,
+        "actual": 30
+      }
+    },
+    {
+      "id": "A04",
+      "title": "Mixed upload reports success after index failure, then chat crashes",
+      "status": "reproduced",
+      "source": "app/server.py:117",
+      "observed": {
+        "upload_status": 200,
+        "readiness": {
+          "questions": [],
+          "chunk_count": 3,
+          "source_count": 2,
+          "file_types": [
+            "CSV",
+            "TXT"
+          ],
+          "vectorstore_ready": false,
+          "tabular_ready": true
+        },
+        "chat_status": 500
+      }
+    },
+    {
+      "id": "A05",
+      "title": "Response planning is not applied to the final answer prompt",
+      "status": "reproduced",
+      "source": "agents/qa_agent.py:40",
+      "observed": {
+        "planned_section_in_prompt": false
+      }
+    },
+    {
+      "id": "A06",
+      "title": "Blank numeric cells make a numeric column disappear from totals",
+      "status": "reproduced",
+      "source": "ingestion/file_loader.py:53",
+      "observed": {
+        "expected_amount": 40,
+        "actual": {
+          "total": {}
+        },
+        "dtype_after_normalization": "object"
+      }
+    },
+    {
+      "id": "R01",
+      "title": "Fusion collapses identical text with different source provenance",
+      "status": "reproduced",
+      "source": "agents/retriever_agent.py:44",
+      "observed": {
+        "input_sources": 2,
+        "retained_sources": 1
+      }
+    },
+    {
+      "id": "R02",
+      "title": "BM25 loses case and punctuation variants",
+      "status": "reproduced",
+      "source": "agents/retriever_agent.py:37",
+      "observed": {
+        "exact_score": 0.5108256237659907,
+        "variant_score": 0.0
+      }
+    },
+    {
+      "id": "R03",
+      "title": "Zero lexical overlap and no vector hits still return evidence",
+      "status": "reproduced",
+      "source": "agents/retriever_agent.py:78",
+      "observed": {
+        "vector_hits": 0,
+        "lexical_overlap": 0,
+        "returned_chunks": 3
+      }
+    },
+    {
+      "id": "R04",
+      "title": "A failed reranker load is cached until cache clear or restart",
+      "status": "reproduced",
+      "source": "retrieval/reranker.py:29",
+      "observed": {
+        "loader_calls": 1,
+        "second_result_is_none": true
+      }
+    },
+    {
+      "id": "I01",
+      "title": "Large JSON bypasses the text chunk size",
+      "status": "reproduced",
+      "source": "ingestion/semantic_chunker.py:15",
+      "observed": {
+        "chunks": 1,
+        "longest_characters": 18130
+      }
+    },
+    {
+      "id": "E01",
+      "title": "Different embedding dimensions load successfully then fail on search",
+      "status": "reproduced",
+      "source": "vector_Store/faiss_store.py:45",
+      "observed": {
+        "load_succeeded": true,
+        "index_dimension": 2,
+        "query_dimension": 3,
+        "search_error": "AssertionError"
+      }
+    },
+    {
+      "id": "E02",
+      "title": "Same-dimensional incompatible embeddings silently return the wrong document",
+      "status": "reproduced",
+      "source": "vector_Store/faiss_store.py:45",
+      "observed": {
+        "expected_source": "alpha.txt",
+        "actual_source": "beta.txt",
+        "exception": null
+      }
+    },
+    {
+      "id": "E03",
+      "title": "Changing EMBEDDING_MODEL does not invalidate the model cache",
+      "status": "reproduced",
+      "source": "embeddings/Hugging_face_embedding.py:32",
+      "observed": {
+        "requested_second": "audit-second",
+        "actual_second": "audit-first"
+      }
+    },
+    {
+      "id": "S01",
+      "title": "An independent client can query a previous client's uploaded document",
+      "status": "reproduced",
+      "source": "app/server.py:50",
+      "observed": {
+        "second_client_status": 200,
+        "other_client_marker_returned": true
+      }
+    },
+    {
+      "id": "S02",
+      "title": "Provider changes affect another client",
+      "status": "reproduced",
+      "source": "app/server.py:208",
+      "observed": {
+        "second_client_provider": "gemini"
+      }
+    },
+    {
+      "id": "P01",
+      "title": "Restart restores vectors but loses spreadsheet computation state",
+      "status": "reproduced",
+      "source": "app/server.py:54",
+      "observed": {
+        "upload_status": 200,
+        "tables_before_restart": 1,
+        "vectorstore_restored": true,
+        "tabular_assets_restored": 0
+      }
+    },
+    {
+      "id": "P02",
+      "title": "Blocking graph invocation stalls the API event loop",
+      "status": "reproduced",
+      "source": "app/server.py:184",
+      "observed": {
+        "requested_timer_ms": 5,
+        "observed_timer_ms": 65.1,
+        "synthetic_block_ms": 60
+      }
+    },
+    {
+      "id": "P03",
+      "title": "LLM configuration failure is returned as a successful answer",
+      "status": "not_reproduced",
+      "source": "agents/qa_agent.py:83",
+      "observed": {
+        "status": 503,
+        "response": null
+      }
+    },
+    {
+      "id": "P04",
+      "title": "Interrupted index save destroys the previously loadable corpus",
+      "status": "reproduced",
+      "source": "vector_Store/faiss_store.py:39",
+      "observed": {
+        "prior_index_vectors": 2,
+        "reload_error": "EOFError",
+        "fault": "injected disk write failure in temporary directory"
+      }
+    },
+    {
+      "id": "V01",
+      "title": "Blank query is accepted by the HTTP API",
+      "status": "not_reproduced",
+      "source": "app/server.py:65",
+      "observed": {
+        "status": 422
+      }
+    },
+    {
+      "id": "V02",
+      "title": "Unknown file types are rejected (control)",
+      "status": "control_passed",
+      "source": "ingestion/file_loader.py:325",
+      "observed": {
+        "status": 422,
+        "control": true
+      }
+    }
+  ]
+}

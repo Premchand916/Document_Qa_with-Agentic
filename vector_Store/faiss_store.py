@@ -1,5 +1,4 @@
 from pathlib import Path
-from functools import lru_cache
 
 from embeddings.Hugging_face_embedding import get_embedding_model
 
@@ -18,45 +17,34 @@ def _get_faiss_class():
     return FAISS
 
 
-@lru_cache(maxsize=2)
 def get_cached_embedding():
     return get_embedding_model()
 
 
+def build_vector_store(documents):
+    """Build in memory; publication is owned by the workspace repository."""
+    return _get_faiss_class().from_documents(documents, get_cached_embedding())
+
+
 def create_vector_store(documents):
-    FAISS = _get_faiss_class()
-
-    embedding_model = get_cached_embedding()
-
-    vectorstore = FAISS.from_documents(
-        documents,
-        embedding_model
-    )
-
-    # Ensure DB folder exists
-    DB_PATH.mkdir(parents=True, exist_ok=True)
-
-    # Save index
-    vectorstore.save_local(str(DB_PATH))
-
+    """Compatibility for the legacy entry point, in its own namespace."""
+    from storage.workspaces import WorkspaceRepository
+    repository = WorkspaceRepository(DB_PATH, get_cached_embedding)
+    previous = repository.state("legacy-default")["active_version"]
+    vectorstore = build_vector_store(documents)
+    repository.publish("legacy-default", vectorstore, [], [], [], [], expected_version=previous)
     return vectorstore
 
 
 def load_vector_store_direct():
-    """Load persisted FAISS index without any framework-specific caching."""
+    from storage.workspaces import LegacyIndexError, WorkspaceRepository
     if not DB_PATH.exists():
         return None
-
-    FAISS = _get_faiss_class()
-    embedding_model = get_cached_embedding()
-
-    return FAISS.load_local(
-        str(DB_PATH),
-        embedding_model,
-        allow_dangerous_deserialization=True,
-    )
+    snapshot = WorkspaceRepository(DB_PATH, get_cached_embedding).snapshot("legacy-default")
+    if snapshot.vectorstore is None and (DB_PATH / "index.pkl").exists():
+        raise LegacyIndexError("Re-upload original files; legacy pickle indexes are not loaded")
+    return snapshot.vectorstore
 
 
-# Keep legacy name for backward compatibility with the old Streamlit entry point.
 def load_vector_store():
     return load_vector_store_direct()

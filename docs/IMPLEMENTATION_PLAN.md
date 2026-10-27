@@ -1,0 +1,235 @@
+# RAG Architecture Implementation Plan
+
+**Status: Steps 0–2 implemented; Step 3 in progress; Steps 4–5 local acceptance cases pass; Step 6 first slice implemented, 27 October 2026.** See [baseline results](BASELINE.md), [Step 1 boundaries](STEP1_RESULTS.md), [Step 2 storage results](STEP2_RESULTS.md), [Step 3 progress](STEP3_RESULTS.md), [Step 4 results](STEP4_RESULTS.md), [Step 5 results](STEP5_RESULTS.md), and [Step 6 progress](STEP6_RESULTS.md). There are 110 passing offline tests and 6 remaining reproduced diagnostic limitations. Shared identity-provider deployment remains unconfigured. This plan translates the [architecture audit](../ARCHITECTURE_REVIEW.md) into reviewable steps; confirmed failures and untested attack hypotheses remain separate.
+
+## Outcome and architecture decisions
+
+Build an assistant that isolates users, preserves evidence and conversations, calculates correctly, and exposes failures. Keep FastAPI, LangGraph, Pandas, FAISS, and the existing UI. Extend the current packages.
+
+Start with one application process, local artifacts, and persistent SQLite storage behind repository interfaces. Shared deployment requires authenticated identity; a development identity is allowed only in an explicit loopback-only mode. A client-supplied workspace ID never establishes ownership. A shared database and separate workers follow when deployment requirements justify them.
+
+Preserve today's **replace-corpus upload behavior**, but make replacement atomic. Append/merge remains a separate feature. Each request pins one corpus version. Conversation history survives replacement, while references to old sources are marked stale. Provider credentials stay in server configuration; only workspace preferences enter the database.
+
+## Target architecture
+
+```mermaid
+flowchart TD
+  UI[Browser: messages, evidence, job status] --> API[FastAPI: identity, validation, quotas]
+  API --> DB[(Workspace and conversation database)]
+  API --> Upload[Bounded ingestion job]
+  Upload --> Parse[Parse once: text, typed tables, provenance]
+  Parse --> Build[Token-aware chunks and embedding manifest]
+  Build --> Versions[(Immutable corpus versions)]
+  Versions --> Publish[Validate and publish active version]
+  Publish --> DB
+  API --> Context[Load authorized thread and pin corpus version]
+  Context --> Route[Resolve follow-up and validate route]
+  Route --> Retrieve[Vector plus BM25, fusion, reranker]
+  Route --> Table[Validated table operation]
+  Route --> Web[Explicit web search]
+  Versions --> Retrieve
+  Versions --> Table
+  Retrieve --> Evidence[Evidence IDs and sufficiency checks]
+  Table --> Evidence
+  Web --> Evidence
+  Evidence --> Answer[Answer, clarify, or abstain]
+  Answer --> Persist[Persist messages and result status]
+  Persist --> UI
+  Episodes[(Validated episodic records)] -. optional scoped recall .-> Context
+  Persist -. selected validated outcomes .-> Episodes
+```
+
+Document vectors, conversation checkpoints, episodic records, and RAM caches have separate lifecycles. Checkpoints contain serializable values and IDs, never live FAISS objects, DataFrames, models, or credentials.
+
+Proposed contracts:
+
+- `RequestContext`: principal, workspace, conversation, request ID, deadline, pinned corpus version.
+- `CorpusVersion`: source IDs/hashes, parser/chunker versions, embedding fingerprint, metric, table schemas, checksums, readiness.
+- `ToolPlan`: route, source/table ID, allowed operation, columns, typed filters, ambiguity status.
+- `EvidenceItem`: stable chunk/row ID, source/version/page/sheet, excerpt, scores, origin.
+- `AnswerResult`: answered/needs-clarification/insufficient-evidence status, citations, tool results, degradation flags. Infrastructure failures use structured API errors.
+
+## Process at every step
+
+**Inspect → write the desired-behavior test → implement a focused change → run checks → demonstrate the scenario → update the audit.** Report changed files, before/after behavior, evidence, limitations, and next action. Complete each gate before dependent work. Diagnostic success currently means failures reproduced; it is not a regression-test pass.
+
+Use small patches within each step. Keep planning separate from implementation. Before the major architecture change, prepare the issue requested by the repository README; publishing requires explicit user instruction. No commit, push, or deployment is included in this plan.
+
+## Step 0 — Baseline and test contract
+
+**Completed:** 28 offline tests, 11 labeled evaluation cases, all 26 diagnostic IDs assigned to future steps, and a 117-package installed dependency snapshot. Tests pass; 25 diagnostic failures/limitations remain reproduced. Real-model quality and fresh-environment installation remain unverified. The provisional workload below is a development target, not a production performance promise. Details: [BASELINE.md](BASELINE.md).
+
+**Implement:** preserve the dated diagnostic evidence. Add a development test runner and synthetic fixtures under `tests/`; record supported Python and dependency versions reproducibly. Introduce desired-behavior regression assertions with each repair. Do not hide known failures with blanket skips or tests that merely assert broken behavior.
+
+Create a labeled evaluation set for PDF QA, CSV calculations, follow-ups, absent answers, duplicate sources, conflicting versions, multilingual terms, and hostile instructions. Record expected evidence as well as answers. Separate offline deterministic checks from opt-in real-model evaluation.
+
+**Files:** development requirements, `tests/`, `tools/audit_failure_modes.py`, `docs/`.
+
+**Gate:** baseline runs without production data or network; every audit case maps to a step below. Record corpus size, target concurrency, hardware, latency budget, and quality targets before making performance promises.
+
+## Step 1 — API boundaries and safe rendering
+
+**Completed in code:** 50 offline tests and 14 browser sanitizer checks pass. M02/V01/P03 no longer reproduce; 22 other diagnostic failures/limitations remain. Chosen integration: explicit loopback-only local mode plus a fail-closed authentication-proxy adapter with server-owned membership. Real proxy/identity-provider deployment was not performed. A shared single workspace remains until Step 2. See [STEP1_RESULTS.md](STEP1_RESULTS.md).
+
+**Covers:** M02, V01, V02; untested HTML/prompt-injection and upload-limit scenarios.
+
+**Implement:** typed bounded messages, nonblank queries, constrained provider/route values, file-count and streamed-byte limits. Reject invalid input before model/parsing work. Establish authenticated request context and membership checks using an established identity integration for shared deployment.
+
+Sanitize rendered Markdown, restrict unsafe URL schemes, and pin frontend dependencies. Treat retrieved text as untrusted evidence with source delimiters; prompts alone are not a security boundary. Return safe error codes and request IDs instead of raw exceptions.
+
+**Files:** `app/server.py`, `app/static/index.html`, `utils/prompt_skill.py`; proposed `app/schemas.py`, `app/security.py`.
+
+**Gate:** null roles and blank questions return 422; unsupported uploads still return 422; oversized payloads return 413. Browser fixtures verify hostile markup cannot execute. Forged identity is rejected. Full data isolation additionally requires step 2.
+
+## Step 2 — Workspace storage and atomic corpus publication
+
+**Completed:** SQLite workspace preferences/version pointers, immutable checked artifacts, persisted tables, explicit providers, authorized workspace selection, and safe legacy-index rejection. S01/S02/P01/P04 plus the mixed-upload failure A04 no longer reproduce. Concurrent repository and injected commit-failure tests pass; actual power loss, multi-process deployment, retention cleanup, and proxy integration remain unverified. See [Step 2 results](STEP2_RESULTS.md).
+
+**Covers:** S01–S02, P01, P04; local artifact tampering and concurrent-save hypotheses.
+
+**Implement:** replace global `_state` ownership with workspace repositories. Pass provider preferences explicitly; stop mutating process-wide environment settings per user. Persist typed tables and source metadata with vectors so restart restores the same capabilities.
+
+Build replacements in new private directories. Validate artifacts and flush writes before transactionally switching the database's active-version pointer. Serialize publication per workspace. Readers pin a version; retain old versions while readers use them. A pre-publication crash leaves an orphan for cleanup, while a failed save leaves the previous version active.
+
+Store docstore metadata in a validated non-executable format and reconstruct the FAISS wrapper. Do not automatically load legacy pickles: rebuild from originals or provide an explicit trusted migration. Checksums detect corruption; filesystem permissions still protect against malicious writers.
+
+**Files:** `app/server.py`, `vector_Store/faiss_store.py`; proposed `storage/` interfaces and migrations.
+
+**Gate:** clients cannot read/replace other workspaces or alter their providers; tables survive restart; failed saves preserve the previous corpus. Test simultaneous replacements and crashes before/after pointer publication.
+
+## Step 3 — Bounded ingestion and complete provenance
+
+**In progress:** FastAPI parses each source once in a short-lived process with a 30-second deadline, two concurrent parser slots per API process, and a bounded result. Linux workers set an address-space limit; macOS hard memory limits remain unverified. Nullable numeric columns stay numeric; every format is chunked within a 240-token content budget when the encoder tokenizer is available, with a conservative UTF-8 byte fallback. Source/chunk IDs, JSON pointers with node/depth limits, PDF text-block coordinates and line limits, basic Office expansion and PDF/slide/table count limits, durable extraction reports and partial extraction notices, and an actionable OCR-required error are implemented. CSV/Excel reads stop at the row ceiling plus one. See [Step 3 progress](STEP3_RESULTS.md). Scanned-document OCR evaluation and representative resource measurement remain open.
+
+**Covers:** I01, parts of A04/A06; scanned PDF, layout, archive expansion, and RAM hypotheses.
+
+**Implement:** parse once into text blocks, typed tables, coordinates, and extraction warnings. Preserve nullable numeric dtypes; create separate text for embedding. Apply tokenizer-aware chunking to every supported format, including JSON, slides, and tables, reserving space for prefixes/special tokens.
+
+Assign stable source/version/chunk IDs and retain page/sheet/row references. Report empty extraction, OCR requirements, and partial capabilities. Bound archive expansion, page/row counts, OCR work, and parser runtime. Use isolated processes where hard cancellation is needed.
+
+**Files:** `ingestion/file_loader.py`, `pdf_loader.py`, `semantic_chunker.py`, upload UI.
+
+**Gate:** a fact near the end of long JSON is indexed; chunks fit tokenizer limits; nullable numbers remain numeric; scanned/unsupported content produces a warning instead of false readiness. Resource tests use controlled fixtures and hard limits.
+
+## Step 4 — Embedding/index compatibility
+
+**Local acceptance cases pass:** New corpus manifests record encoder dimension/fingerprint, exact L2 metric, and chunker version. The loaded model's configuration, tokenizer vocabulary, and weights enter the fingerprint. Incompatible dimensions or same-dimension encoders are rejected before native FAISS read; model-name/revision changes select separate cached instances. A repository rollback rehearsal passes with synthetic encoders. Locally cached MiniLM reopens a saved corpus with a fresh instance; equal-dimension BGE-small is rejected before native index loading. The embedding factory uses the standard local cache when the project cache is empty. See [Step 4 results](STEP4_RESULTS.md). Multi-process deployment remains unverified.
+
+**Covers:** E01–E03.
+
+**Implement:** resolve encoder identity, revision/local fingerprint, dimension, normalization, metric, tokenizer, and chunker version into immutable configuration. Include it in the corpus manifest and cache keys. Validate compatibility before activation/search. Model changes build a new corpus version; never reuse vectors from another coordinate system.
+
+**Files:** `embeddings/Hugging_face_embedding.py`, `vector_Store/faiss_store.py`, manifest validation.
+
+**Gate:** dimension mismatch and same-dimension incompatible encoders are rejected before search. Configuration changes select the correct cached model. Rollback restores a compatible model/index pair. Keep exact FAISS search as the reference.
+
+## Step 5 — Correct routing and table operations
+
+**Acceptance cases pass offline:** Question/source-aware deterministic routing now uses a validated `ToolPlan` for one allowlisted table operation and an optional typed equality filter. Explicit source/sheet selection, ambiguity/unsupported-operation clarification, exact Pandas results, row provenance, and structured API tool results are implemented. A01–A03 no longer reproduce; A06 was repaired in Step 3. See [Step 5 results](STEP5_RESULTS.md). Broader natural-language plans and multi-table operations remain outside this gate.
+
+**Covers:** A01–A03, A06; ambiguous sources and unsupported calculations.
+
+**Implement:** route using the question and server-owned source metadata. Produce a typed `ToolPlan`; an LLM may propose it, but code validates table IDs, columns, operations, filters, and permissions. Execute allowlisted Pandas operations without generated Python or `eval`. Clarify ambiguity and reject unsupported requests instead of summarizing the first table.
+
+Start with sum/mean/min/max/count and typed filters. Add grouping/joins only with defined semantics and fixtures. Return source, selected rows, operation, null policy, and result. Final presentation must preserve calculated values.
+
+**Files:** `agents/planner_agent.py`, `dataframe_tool.py`, `intent_classifier.py`, graph state.
+
+**Gate:** PDF questions use retrieval even when CSV exists; second-table total equals 99, North-only total equals 10, and nullable-value total equals 40. Unknown columns or ambiguous sources produce clarification.
+
+## Step 6 — Durable conversation memory
+
+**First slice implemented:** server-owned SQLite transcripts, idempotent turns, reloadable UI, bounded context, conservative follow-up search expansion, and a two-slot offloaded graph call. M01/M04/P02 no longer reproduce. The active API is durable, while the legacy memory factory remains ephemeral (M03). This is a single-worker design; summarization, retention/deletion, unresolved-reference clarification, durable graph checkpoints, and multi-worker leases remain open. See [Step 6 progress](STEP6_RESULTS.md).
+
+**Covers:** M01–M04; reload loss, forged history, duplicate turns, ambiguous follow-ups.
+
+**Implement:** retain one authoritative transcript. The first slice uses a SQLite conversation repository because graph state still contains live FAISS/Pandas objects and no SQLite checkpointer dependency is installed. Before adding a persistent LangGraph checkpointer, make graph state serializable and reconcile checkpoint ownership with that transcript. UI sends the new message and idempotency key, then reads persisted history. Prompt profiles control style only.
+
+Move the blocking graph invocation out of the FastAPI event loop in this slice, with bounded execution and an explicit capacity response. The first slice uses a process-wide two-slot limit; per-workspace fairness belongs with Step 10's job scheduler. Full durable jobs, stage metrics, and multi-process load testing remain in Step 10. Conversation persistence must not increase event-loop blocking.
+
+Serialize IDs and values in graph state, reconstructing live dependencies per request. Serialize turns within a conversation or reject conflicting submissions. Bound recent context and summarize older messages while retaining originals according to policy. Deprecate the disconnected memory helper or adapt it without shared mutable dictionaries.
+
+Resolve follow-ups before retrieval: preserve the original question, create a standalone search query, and clarify unresolved references. History provides context, not authoritative evidence.
+
+**Files:** `memory/conversation_memory.py`, `langgraph_flow/state.py`, `graph_builder.py`, `utils/prompt_skill.py`, API/UI.
+
+**Gate:** history works without a profile and survives reload/restart; duplicate requests do not duplicate turns; threads remain isolated; “What is its deadline?” retrieves the previously discussed document; returned history cannot mutate persisted state.
+
+Use a durable checkpointer: an in-memory saver cannot meet restart requirements. Cross-thread episodic storage remains separate. [LangGraph persistence documentation](https://docs.langchain.com/oss/python/langgraph/persistence).
+
+## Step 7 — Hybrid retrieval and reranker lifecycle
+
+**Covers:** R01–R04; provenance loss, weak evidence, stale caches, active `retrieval/reranker.py` concerns.
+
+**Implement:** normalize BM25 consistently while preserving domain identifiers; discard zero-match lexical candidates. Fuse by stable chunk IDs and retain all source references for duplicate text. Key caches by workspace, corpus version, retrieval configuration, query, and count; bound memory and invalidate explicitly.
+
+Replace permanently cached reranker `None` with lifecycle state: unloaded, ready, failed-with-retry-time. Cache successful models by immutable configuration; provide bounded backoff and explicit reload. Synchronize initialization, cap candidates/tokens, and validate score count and finite values. Return documents, scores, model identity, status, and degradation reason. Deterministic fused-order fallback stays available but becomes visible in traces/UI.
+
+Calibrate evidence sufficiency on labeled data. RRF and raw cross-encoder scores are not universal probabilities. Tune candidate count against both quality and latency.
+
+**Files:** `agents/retriever_agent.py`, `retrieval/reranker.py`, API result schema.
+
+**Gate:** duplicate text retains both citations; normalized lexical fixtures match; absent evidence can abstain; temporary load failure recovers without process restart; fallback is observable; malformed scores cannot corrupt ranking. Compare reranking enabled/disabled on identical evaluation cases.
+
+## Step 8 — Simpler graph and evidence-based answers
+
+**Covers:** A04–A05; unused planner output, legacy graph mismatch, source conflicts, unsupported answers.
+
+**Implement:** use one validated routing/planning decision, deterministic where possible. Retain a plan only if downstream nodes consume it. Send resolved queries to retrieval and validated plans to table tools. Label QA evidence with stable IDs, preserving web/local origin and explicit search mode.
+
+Check citation existence, source version, and exact tool-result preservation. Semantic support requires evaluation; an LLM verifier cannot guarantee truth. Allow at most one bounded retrieval retry, then clarify/abstain. Document the active graph; retire or repair unused entry points before exposing them.
+
+**Files:** `langgraph_flow/graph_builder.py`, `state.py`, `agents/response_planner.py`, `qa_agent.py`, API/UI.
+
+**Gate:** partial ingestion never routes into a null store; retained plans reach QA; unsupported questions abstain; citations exist; conflicts stay visible; retries respect a call budget. Demonstrate document/table/web paths.
+
+## Step 9 — Selective episodic memory
+
+**Depends on:** steps 2, 6, and 8. This is a new capability; episodic memory is currently absent.
+
+**Implement:** save selected analyses/corrections with workspace, task, tool plan, evidence versions, result, validation status, timestamp, and expiry. Separate unvalidated feedback from verified outcomes. Recall only authorized relevant episodes after freshness checks. Version corrections explicitly.
+
+Start with structured task/source lookup. Add an episode embedding index only if evaluation justifies it, with a separate namespace/manifest. Do not automatically embed every chat turn. Propagate deletion through messages, summaries, checkpoints, episodes, and caches according to retention policy.
+
+**Files:** proposed `memory/episodic_memory.py`, storage repositories, graph context loading, feedback UI.
+
+**Gate:** verified corrections improve repeated tasks; stale/rejected/deleted/cross-workspace episodes are excluded. Compare with recall disabled and leave the feature off if it adds unsupported claims.
+
+## Step 10 — Bounded execution and operational visibility
+
+**Covers:** P02–P03; remaining concurrency/RAM hypotheses and provider availability.
+
+**Implement:** move blocking work out of the event loop using bounded execution and backpressure. Use isolated workers for heavy ingestion/hard deadlines; cancelling an awaiting request does not necessarily stop native model/parser work. Add durable ingestion jobs with queued/running/ready/failed states and idempotent publication.
+
+Limit workers, model instances, resident corpora, caches, and conversation context. Record stage/queue duration, tokens where available, degradation, and safe error codes. Distinguish capacity errors, deadlines, and provider failures. Keep readiness/UI consistent. Verify supported provider SDK/model configuration before release.
+
+**Files:** `app/server.py`, `utils/llm_helpers.py`, proposed job service, UI error/status handling.
+
+**Gate:** slow graph work does not stall lightweight requests; failures are not successful answers; restart recovers jobs; retries do not multiply jobs. Measure p50/p95 latency, peak RSS, browser heap, and errors under the step-0 workload. Cross-process tests are required before multi-worker support.
+
+## Step 11 — Evaluation, migration, and index scaling
+
+**Implement:** run repaired regression cases and opt-in real-model evaluations. Measure evidence Recall@k/MRR, answer correctness, citation support, abstention, table accuracy, cost, and latency on held-out cases. ANN neighbor recall and relevance to a user's question are separate measurements.
+
+Retain Flat as the reference. Benchmark HNSW when vector-search latency dominates and memory permits; evaluate IVF/PQ when measured scale/memory warrants training or compression. Compare recall, build time, RSS, update behavior, and end-to-end latency. Add LSH/Annoy or another backend only for a demonstrated need. [FAISS index selection guidance](https://github.com/facebookresearch/faiss/wiki/Guidelines-to-choose-an-index).
+
+**Gate:** repaired deterministic cases pass; held-out quality meets baseline-derived release targets; authorization, restart, disk-failure, browser, parser, and concurrency checks have evidence. Rehearse migration on copies, retain the previous compatible app/schema/corpus version, and test rollback before deployment.
+
+## Expansion after the foundation
+
+The requested general assistant is a separate product scope beyond document QA. Build observable capabilities and measure them; exact replication of a proprietary assistant's internals is not a verifiable requirement.
+
+1. **Identity and connectors:** complete the existing trusted sign-in boundary, then add a connector registry with per-user grants, source permissions, sync cursors, revocation, and deletion. Keep indexed snapshots distinct from live reads. Each connector result needs origin, timestamp, and citation.
+2. **Live data and web extraction:** add allowlisted fetch/search tools with URL safety, timeouts, content-type and byte limits, source freshness, and injection-resistant evidence handling. Evaluate freshness, extraction accuracy, and citation support on held-out tasks.
+3. **Agent runtime and interface:** add durable tool-call events, streaming status, cancellation, a bounded planner/executor loop, and explicit approval for consequential actions. Run independent tool calls concurrently only within per-workspace budgets. Show tool inputs/results, evidence, and failures in the chat interface.
+4. **Coding assistant:** expose an isolated workspace with read/search/edit/test tools, diff review, command allowlists, resource limits, and audit logs. Start with one agent and deterministic task tests; add parallel coding workers only after merge/conflict handling and isolation tests pass.
+5. **Fine-tuning gate:** first collect consented, redacted task traces and held-out evaluations. Separate retrieval/tool failures from model failures. Fine-tune only when the measured gap is model behavior rather than missing evidence or broken tools, and compare against the unfine-tuned local Ollama baseline.
+
+## Delivery checkpoints and next action
+
+- **A — Steps 0–2:** tests, API boundaries, isolated durable corpora. Demonstrate ownership and failed-save safety.
+- **B — Steps 3–5:** bounded extraction, compatible embeddings, correct calculations. Demonstrate source-to-result lineage.
+- **C — Steps 6–8:** durable conversations, observable retrieval/reranking, evidence-based answers. Demonstrate an end-to-end follow-up.
+- **D — Steps 9–11:** optional episodic recall, measured operations, migration/scale decisions. Demonstrate release evidence.
+
+**Next implementation action: start Step 7 retrieval provenance and reranker lifecycle while measuring Step 3 parser resources and scanned-document OCR.** Step 6's first durable-conversation slice is in place, with its remaining gate items recorded above. Step 2 completes checkpoint A in code; Step 4's local compatibility gate and Step 5's table cases pass. Checkpoint B remains open for Step 3 resource evidence. Production rollout has not occurred. Identity-provider deployment, workload targets, mobile layout, and storage-retention policies remain open. Passing checks do not establish production readiness.

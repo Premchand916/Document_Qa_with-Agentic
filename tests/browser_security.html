@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en"><meta charset="utf-8"><title>Step 1 browser security checks</title>
+<script src="/static/vendor/marked-18.1.2.umd.js"></script>
+<script src="/static/vendor/dompurify-3.4.17.min.js"></script>
+<script src="/static/safe-render.js"></script>
+<h1>Step 1 browser security checks</h1>
+<p>Real DOMPurify and Marked bundles; synthetic hostile content only.</p>
+<pre id="result" role="status">Running</pre><div id="fixtures"></div>
+<p><a href="/">Open application preview</a></p>
+<script>
+(async () => {
+  window.securitySentinel = 0;
+  const cases = [
+    ['event handler', '<img src=x onerror="window.securitySentinel=1">'],
+    ['javascript URL', '[bad](javascript:window.securitySentinel=1)'],
+    ['encoded URL', '<a href="jav&#x61;script:window.securitySentinel=1">bad</a>'],
+    ['data URL', '<a href="data:text/html,boom">bad</a>'],
+    ['SVG payload', '<svg onload="window.securitySentinel=1"><a href="javascript:alert(1)">x</a></svg>'],
+    ['embedded frame', '<iframe srcdoc="<script>parent.securitySentinel=1<\/script>"></iframe>'],
+    ['framework directive', '<span x-init="window.securitySentinel=1" @click="window.securitySentinel=1">x</span>'],
+    ['DOM clobbering', '<form id="SafeRender"><input name="markdown"></form>'],
+    ['script element', '<script>window.securitySentinel=1<\/script>'],
+  ];
+  const results=[];
+  for(const [name,payload] of cases){
+    const node=document.createElement('div'); node.innerHTML=SafeRender.markdown(payload);
+    document.getElementById('fixtures').append(node);
+    const badTags=node.querySelector('script,img,svg,math,iframe,form,input,style,object');
+    const badAttrs=[...node.querySelectorAll('*')].some(el=>[...el.attributes].some(a=>/^(on|x-|@|data-|id$|name$)/i.test(a.name)));
+    const badLinks=[...node.querySelectorAll('a[href]')].some(a=>!/^https?:/.test(a.href));
+    results.push({name,passed:!badTags&&!badAttrs&&!badLinks});
+  }
+  const good=document.createElement('div');
+  good.innerHTML=SafeRender.markdown('**Safe bold**\n\n| A | B |\n|---|---|\n| 1 | 2 |\n\n[Source](https://example.com/policy)');
+  results.push({name:'formatting survives',passed:!!good.querySelector('strong')&&!!good.querySelector('table')});
+  const a=good.querySelector('a');
+  results.push({name:'safe external links',passed:a?.rel==='noopener noreferrer'&&a?.target==='_blank'&&a.href==='https://example.com/policy'});
+  results.push({name:'source URL filter',passed:SafeRender.safeUrl('javascript:alert(1)')===''&&SafeRender.safeUrl('https://user:pass@example.com')===''});
+  const purify=window.DOMPurify; window.DOMPurify=undefined;
+  const fallback=SafeRender.markdown('<img src=x onerror=alert(1)>'); window.DOMPurify=purify;
+  results.push({name:'missing sanitizer fails closed',passed:fallback.startsWith('&lt;img')});
+  await new Promise(resolve=>setTimeout(resolve,50));
+  results.push({name:'no payload executed',passed:window.securitySentinel===0});
+  const report={passed:results.filter(r=>r.passed).length,total:results.length,results};
+  document.getElementById('result').textContent=JSON.stringify(report,null,2);
+  document.title=report.passed===report.total?'PASS: Step 1 browser checks':'FAIL: Step 1 browser checks';
+})();
+</script></html>

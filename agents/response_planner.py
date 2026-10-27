@@ -138,7 +138,7 @@ retrieval_focus: <short phrase>
     """
 
     try:
-        response = invoke_orchestrator(prompt)
+        response = invoke_orchestrator(prompt, provider=state.get("provider"))
         content = response.content if hasattr(response, "content") else str(response)
         if isinstance(content, list):
             content = " ".join(str(item) for item in content)

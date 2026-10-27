@@ -55,7 +55,7 @@ def classify_intent(state):
     )
 
     try:
-        response = invoke_orchestrator(prompt)
+        response = invoke_orchestrator(prompt, provider=state.get("provider"))
         content = response.content
 
         if isinstance(content, list):

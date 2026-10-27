@@ -181,23 +181,25 @@ def _build_memory_error_message(primary_model, attempted_models):
     )
 
 
-def create_orchestrator():
-    """Return the active LLM based on LLM_PROVIDER env var."""
-    provider = get_active_provider()
+def create_orchestrator(provider=None):
+    """Use a request provider, with the environment as a legacy/default fallback."""
+    provider = provider or get_active_provider()
+    if provider not in ("gemini", "ollama"):
+        raise LLMConfigurationError("Unknown model provider")
     if provider == "ollama":
         model_name, base_url = _get_ollama_settings()
-        os.environ["OLLAMA_ACTIVE_MODEL"] = model_name
         return _get_ollama_llm(model_name, base_url)
     return _get_gemini_llm()
 
 
-def invoke_orchestrator(prompt):
-    provider = get_active_provider()
+def invoke_orchestrator(prompt, *, provider=None):
+    provider = provider or get_active_provider()
+    if provider not in ("gemini", "ollama"):
+        raise LLMConfigurationError("Unknown model provider")
     if provider != "ollama":
         return _get_gemini_llm().invoke(prompt)
 
     primary_model, base_url = _get_ollama_settings()
-    os.environ["OLLAMA_ACTIVE_MODEL"] = primary_model
 
     try:
         return _get_ollama_llm(primary_model, base_url).invoke(prompt)
@@ -220,8 +222,6 @@ def invoke_orchestrator(prompt):
                 continue
             raise
 
-        os.environ["OLLAMA_MODEL"] = candidate_model
-        os.environ["OLLAMA_ACTIVE_MODEL"] = candidate_model
         return response
 
     raise OllamaModelMemoryError(

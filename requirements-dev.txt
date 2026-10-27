@@ -1,0 +1,3 @@
+-r requirements.txt
+# Tests use Python's built-in unittest runner. TestClient needs HTTPX.
+httpx==0.28.1

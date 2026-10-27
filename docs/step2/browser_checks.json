@@ -1,0 +1,23 @@
+{
+  "verified_on": "2026-10-26",
+  "browser": "Chrome",
+  "preview": "python3 -m tools.preview_step1 --port 8765 --workspaces",
+  "scope": "Manual native browser checks; temporary storage; synthetic models and local-only test identity adapter; real API, graph, FAISS, Pandas and UI",
+  "passed": [
+    "Alpha document query returns alpha.txt source",
+    "Saving an alpha note then selecting beta clears chat and notes",
+    "Beta selection loads beta.txt",
+    "Changing beta to Gemini does not change alpha from Ollama",
+    "Beta CSV upload returns total amount 30",
+    "Page reload restores alpha.txt and Ollama; selecting beta restores sales.csv and Gemini",
+    "Workspace selector has accessible label; provider buttons expose pressed state; console showed no messages during inspection"
+  ],
+  "known_failures": [
+    "At 393 x 852 the existing fixed three-column layout squeezes the chat panel out of view"
+  ],
+  "not_verified": [
+    "Real authentication proxy deployment",
+    "Live model quality",
+    "Production workload and multi-process concurrency"
+  ]
+}

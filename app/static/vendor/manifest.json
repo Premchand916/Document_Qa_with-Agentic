@@ -1,0 +1,29 @@
+[
+  {
+    "package": "dompurify",
+    "version": "3.4.17",
+    "file": "dompurify-3.4.17.min.js",
+    "sha256": "cd37898f9782adf54820c413191b5691803f0f137c799d6edcfd38523b4c2c31",
+    "tarball": "https://registry.npmjs.org/dompurify/-/dompurify-3.4.17.tgz",
+    "npm_integrity": "sha512-B/pSlYVHQ58kqISD/yDjuJ1yfzI34m1gF4lAod2bwSRhiN4K5Cl3H8Af7hqB2PmTL911tdEudnnXn5FnhRoz0w==",
+    "license": "(MPL-2.0 OR Apache-2.0)"
+  },
+  {
+    "package": "marked",
+    "version": "18.1.2",
+    "file": "marked-18.1.2.umd.js",
+    "sha256": "9eb730d2362ae1a8c6201698f17009e16671be6946d3d06503ddc0575283db7c",
+    "tarball": "https://registry.npmjs.org/marked/-/marked-18.1.2.tgz",
+    "npm_integrity": "sha512-DfOnvLAQ6WYeWxWO1u4RyFOeqyHup6dks5PPqnoFiooU7ipRvidO/2j8plhAHIiZg574E9ZlzSjUiPMLAzFkgg==",
+    "license": "MIT"
+  },
+  {
+    "package": "alpinejs",
+    "version": "3.17.5",
+    "file": "alpine-3.17.5.min.js",
+    "sha256": "b4036e9e9ac22fa6f6ae1ba292e015e1f3e9c85d0d79e73e4c8eb9bb139b522e",
+    "tarball": "https://registry.npmjs.org/alpinejs/-/alpinejs-3.17.5.tgz",
+    "npm_integrity": "sha512-XewMqRC6zjy8iaUPn86dxjvooAsNai3hUtQbdn0A5H2w7Jt10xHGZ1SczN5+Dvp3UKkuSEt9moy/UaUWOwKdnQ==",
+    "license": "MIT"
+  }
+]

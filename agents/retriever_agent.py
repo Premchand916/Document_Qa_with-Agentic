@@ -56,17 +56,20 @@ def _rrf_fusion(ranked_lists: list, k: int = RRF_K) -> list:
 
 
 def retriever_agent(state: dict) -> dict:
-    query = state["query"]
+    query = state.get("search_query") or state["query"]
     vectorstore = state["vectorstore"]
     intent = state.get("intent", "document_qa")
     cfg = _INTENT_CONFIG.get(intent, _DEFAULT_CONFIG)
     k_vector, k_bm25, k_final = cfg["k_vector"], cfg["k_bm25"], cfg["k_final"]
 
     vs_id = id(vectorstore)
-    _VECTORSTORE_REGISTRY[vs_id] = vectorstore
+    scoped = bool(state.get("request_context", {}).get("workspace_id"))
+    if not scoped:
+        _VECTORSTORE_REGISTRY[vs_id] = vectorstore
 
     # ── FAISS semantic retrieval ──────────────────────────────────────────────
-    vector_docs = list(_cached_vector_search(query, vs_id, k_vector))
+    vector_docs = (vectorstore.similarity_search(query, k=k_vector) if scoped
+                   else list(_cached_vector_search(query, vs_id, k_vector)))
 
     # ── BM25 lexical retrieval ────────────────────────────────────────────────
     all_docs_list = list(vectorstore.docstore._dict.values())
@@ -75,7 +78,11 @@ def retriever_agent(state: dict) -> dict:
         state["documents"] = vector_docs[:k_final]
         return state
 
-    bm25, indexed_docs = _get_or_build_bm25(vs_id, tuple(all_docs_list))
+    if scoped:
+        indexed_docs = tuple(all_docs_list)
+        bm25 = BM25Okapi([doc.page_content.split() for doc in indexed_docs])
+    else:
+        bm25, indexed_docs = _get_or_build_bm25(vs_id, tuple(all_docs_list))
     bm25_scores = bm25.get_scores(query.split())
     top_bm25_idx = sorted(range(len(bm25_scores)), key=lambda i: bm25_scores[i], reverse=True)[:k_bm25]
     bm25_docs = [indexed_docs[i] for i in top_bm25_idx]

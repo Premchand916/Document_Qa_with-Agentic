@@ -1,5 +1,8 @@
 import json
 import os
+import hashlib
+import zipfile
+from dataclasses import dataclass, field
 from io import BytesIO
 from pathlib import Path
 
@@ -30,6 +33,31 @@ SUPPORTED_FILE_TYPES = {
 
 TABULAR_EXTENSIONS = {".xlsx", ".xlsm", ".csv", ".tsv"}
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".tiff", ".tif", ".bmp", ".webp"}
+MAX_TABLE_ROWS = 100_000
+MAX_PDF_PAGES = 500
+MAX_PDF_TEXT_LINES = 20_000
+PDF_LINES_PER_BLOCK = 8
+MAX_SLIDES = 500
+MAX_ARCHIVE_ENTRIES = 500
+MAX_ARCHIVE_EXPANDED_BYTES = 100 * 1024 * 1024
+MAX_JSON_NODES = 5000
+MAX_JSON_DEPTH = 64
+
+
+class IngestionLimitError(ValueError):
+    """Supported input exceeds a parser resource limit."""
+
+
+class OCRRequiredError(ValueError):
+    """A PDF has no extractable text and needs OCR before indexing."""
+
+
+@dataclass
+class ParsedFile:
+    documents: list[Document]
+    tabular_assets: list[dict]
+    warnings: list[str]
+    extraction_report: dict = field(default_factory=dict)
 
 
 def _to_bytes(uploaded_file):
@@ -53,8 +81,16 @@ def _clean_cell(value):
 def _normalize_dataframe(dataframe):
     normalized_df = dataframe.copy()
     normalized_df.columns = [str(column).strip() for column in normalized_df.columns]
-    normalized_df = normalized_df.fillna("")
-    return normalized_df
+    if len(normalized_df.index) > MAX_TABLE_ROWS:
+        raise IngestionLimitError(f"Table exceeds {MAX_TABLE_ROWS} rows")
+    return normalized_df.convert_dtypes()
+
+
+def _check_archive(raw: bytes):
+    with zipfile.ZipFile(BytesIO(raw)) as archive:
+        entries = archive.infolist()
+        if len(entries) > MAX_ARCHIVE_ENTRIES or sum(item.file_size for item in entries) > MAX_ARCHIVE_EXPANDED_BYTES:
+            raise IngestionLimitError("Office archive expansion limit exceeded")
 
 
 def _read_excel_frames(file_obj):
@@ -62,14 +98,14 @@ def _read_excel_frames(file_obj):
     excel_file = pd.ExcelFile(workbook_bytes, engine="openpyxl")
     frames = []
     for sheet_name in excel_file.sheet_names:
-        dataframe = excel_file.parse(sheet_name=sheet_name)
+        dataframe = excel_file.parse(sheet_name=sheet_name, nrows=MAX_TABLE_ROWS + 1)
         frames.append((sheet_name, _normalize_dataframe(dataframe)))
     return frames
 
 
 def _read_delimited_frame(file_obj, extension):
     delimiter = "\t" if extension == ".tsv" else ","
-    dataframe = pd.read_csv(BytesIO(_to_bytes(file_obj)), sep=delimiter)
+    dataframe = pd.read_csv(BytesIO(_to_bytes(file_obj)), sep=delimiter, nrows=MAX_TABLE_ROWS + 1)
     return _normalize_dataframe(dataframe)
 
 
@@ -141,12 +177,44 @@ def _tabular_chunk_documents(dataframe, source_name, file_type, sheet_name="Data
     return documents
 
 
-def load_pdf(file_obj, source_name):
+def load_pdf(file_obj, source_name, warnings=None, report=None):
     documents = []
+    blank_pages = []
+    coordinate_pages = []
+    text_pages = 0
+    line_count = 0
     with pdfplumber.open(BytesIO(_to_bytes(file_obj))) as pdf:
+        if len(pdf.pages) > MAX_PDF_PAGES:
+            raise IngestionLimitError(f"PDF exceeds {MAX_PDF_PAGES} pages")
+        if report is not None:
+            report["page_count"] = len(pdf.pages)
         for page_num, page in enumerate(pdf.pages, start=1):
+            extractor = getattr(page, "extract_text_lines", None)
+            lines = extractor(return_chars=False) if callable(extractor) else []
+            lines = [line for line in lines if line.get("text", "").strip()]
+            line_count += len(lines)
+            if line_count > MAX_PDF_TEXT_LINES:
+                raise IngestionLimitError("PDF text-line limit exceeded")
+            if lines:
+                text_pages += 1
+                coordinate_pages.append(page_num)
+                for start in range(0, len(lines), PDF_LINES_PER_BLOCK):
+                    block = lines[start:start + PDF_LINES_PER_BLOCK]
+                    bbox = [min(float(line["x0"]) for line in block),
+                            min(float(line["top"]) for line in block),
+                            max(float(line["x1"]) for line in block),
+                            max(float(line["bottom"]) for line in block)]
+                    documents.append(Document(
+                        page_content="\n".join(line["text"].strip() for line in block),
+                        metadata={"source": source_name, "page": page_num, "file_type": "pdf",
+                                  "content_type": "pdf_block", "line_start": start + 1,
+                                  "line_end": start + len(block), "bbox": bbox,
+                                  "page_size": [float(page.width), float(page.height)]},
+                    ))
+                continue
             text = page.extract_text()
-            if text:
+            if text and text.strip():
+                text_pages += 1
                 documents.append(
                     Document(
                         page_content=text,
@@ -155,15 +223,28 @@ def load_pdf(file_obj, source_name):
                             "page": page_num,
                             "file_type": "pdf",
                             "content_type": "pdf_page",
+                            "coordinate_status": "unavailable",
                         },
                     )
                 )
+            else:
+                blank_pages.append(page_num)
+    if report is not None:
+        report.update(text_pages=text_pages, pages_without_text=blank_pages,
+                      pages_with_coordinates=coordinate_pages)
+    if blank_pages and documents and warnings is not None:
+        pages = ", ".join(str(page) for page in blank_pages[:20])
+        suffix = "…" if len(blank_pages) > 20 else ""
+        warnings.append(f"{source_name}: PDF page{'s' if len(blank_pages) != 1 else ''} {pages}{suffix} had no extractable text; OCR may be required.")
     return documents
 
 
-def load_pptx(file_obj, source_name):
+def load_pptx(file_obj, source_name, warnings=None):
     documents = []
+    blank_slides = 0
     presentation = Presentation(BytesIO(_to_bytes(file_obj)))
+    if len(presentation.slides) > MAX_SLIDES:
+        raise IngestionLimitError(f"Presentation exceeds {MAX_SLIDES} slides")
 
     for slide_index, slide in enumerate(presentation.slides, start=1):
         text_parts = []
@@ -174,6 +255,7 @@ def load_pptx(file_obj, source_name):
                     text_parts.append(cleaned)
 
         if not text_parts:
+            blank_slides += 1
             continue
 
         slide_text = "\n".join(text_parts)
@@ -190,6 +272,9 @@ def load_pptx(file_obj, source_name):
             )
         )
 
+    if blank_slides and documents and warnings is not None:
+        unit = "slide" if blank_slides == 1 else "slides"
+        warnings.append(f"{source_name}: {blank_slides} {unit} had no extractable text.")
     return documents
 
 
@@ -303,22 +388,37 @@ def load_image_ocr(file_obj, source_name):
 def load_json_document(file_obj, source_name):
     raw_text = _to_bytes(file_obj).decode("utf-8", errors="ignore")
     parsed = json.loads(raw_text)
-    pretty = json.dumps(parsed, indent=2, ensure_ascii=True)
+    documents = []
+    stack = [("", parsed, 0)]
+    visited = 0
+    while stack:
+        pointer, value, depth = stack.pop()
+        visited += 1
+        if visited > MAX_JSON_NODES or depth > MAX_JSON_DEPTH:
+            raise IngestionLimitError("JSON structure limit exceeded")
+        if isinstance(value, dict) and value:
+            if visited + len(stack) + len(value) > MAX_JSON_NODES:
+                raise IngestionLimitError("JSON structure limit exceeded")
+            for key, child in reversed(list(value.items())):
+                escaped = key.replace("~", "~0").replace("/", "~1")
+                stack.append((f"{pointer}/{escaped}", child, depth + 1))
+            continue
+        if isinstance(value, list) and value:
+            if visited + len(stack) + len(value) > MAX_JSON_NODES:
+                raise IngestionLimitError("JSON structure limit exceeded")
+            for index in range(len(value) - 1, -1, -1):
+                stack.append((f"{pointer}/{index}", value[index], depth + 1))
+            continue
+        rendered = json.dumps(value, ensure_ascii=False)
+        documents.append(Document(
+            page_content=f"Source: {source_name}\nJSON pointer: {pointer or '(root)'}\nValue: {rendered}",
+            metadata={"source": source_name, "page": "JSON", "file_type": "json",
+                      "content_type": "json_value", "json_pointer": pointer},
+        ))
+    return documents
 
-    return [
-        Document(
-            page_content=pretty,
-            metadata={
-                "source": source_name,
-                "page": "JSON",
-                "file_type": "json",
-                "content_type": "json_document",
-            },
-        )
-    ]
 
-
-def load_uploaded_file(uploaded_file):
+def parse_uploaded_file(uploaded_file) -> ParsedFile:
     source_name = getattr(uploaded_file, "name", "uploaded_file")
     extension = Path(source_name).suffix.lower()
 
@@ -327,27 +427,68 @@ def load_uploaded_file(uploaded_file):
             f"Unsupported file type '{extension}'. Supported types: {', '.join(sorted(SUPPORTED_FILE_TYPES))}"
         )
 
+    raw = _to_bytes(uploaded_file)
+    file_obj = BytesIO(raw)
+    if extension in {".xlsx", ".xlsm", ".pptx"}:
+        _check_archive(raw)
+    assets = []
+    warnings = []
+    report = {"source": source_name, "file_type": extension.lstrip("."), "text_extracted": True,
+              "ocr_engine": None, "page_count": None, "text_pages": None,
+              "pages_without_text": [], "pages_with_coordinates": []}
+
     if extension == ".pdf":
-        documents = load_pdf(uploaded_file, source_name)
+        documents = load_pdf(file_obj, source_name, warnings, report)
     elif extension == ".pptx":
-        documents = load_pptx(uploaded_file, source_name)
+        documents = load_pptx(file_obj, source_name, warnings)
     elif extension in {".xlsx", ".xlsm"}:
-        documents = load_excel(uploaded_file, source_name, extension)
+        frames = _read_excel_frames(file_obj)
+        documents = []
+        for sheet_name, dataframe in frames:
+            documents.extend(_tabular_chunk_documents(dataframe, source_name, extension.lstrip("."), sheet_name))
+            assets.append(_tabular_asset(dataframe, source_name, sheet_name, extension))
     elif extension in {".csv", ".tsv"}:
-        documents = load_delimited_text(uploaded_file, source_name, extension)
+        dataframe = _read_delimited_frame(file_obj, extension)
+        documents = _tabular_chunk_documents(dataframe, source_name, extension.lstrip("."), "Data")
+        assets.append(_tabular_asset(dataframe, source_name, "Data", extension))
     elif extension in {".txt", ".md"}:
-        documents = load_text_document(uploaded_file, source_name, extension)
+        documents = load_text_document(file_obj, source_name, extension)
     elif extension == ".json":
-        documents = load_json_document(uploaded_file, source_name)
+        documents = load_json_document(file_obj, source_name)
     elif extension in IMAGE_EXTENSIONS:
-        documents = load_image_ocr(uploaded_file, source_name)
+        documents = load_image_ocr(file_obj, source_name)
     else:
         documents = []
 
     if not documents:
+        if extension == ".pdf":
+            raise OCRRequiredError(f"OCR required: no readable text was found in '{source_name}'.")
         raise ValueError(f"No readable content was found in '{source_name}'.")
 
-    return documents
+    source_id = hashlib.sha256(source_name.encode("utf-8") + b"\0" + raw).hexdigest()
+    for document in documents:
+        document.metadata["source_id"] = source_id
+    for asset in assets:
+        asset["source_id"] = source_id
+    report["ocr_engine"] = next((doc.metadata["ocr_engine"] for doc in documents
+                                  if "ocr_engine" in doc.metadata), None)
+    return ParsedFile(documents, assets, warnings, report)
+
+
+def _tabular_asset(dataframe, source_name, sheet_name, extension):
+    return {
+        "asset_id": f"{source_name}::{sheet_name}",
+        "source": source_name,
+        "sheet": sheet_name,
+        "file_type": extension.lstrip("."),
+        "dataframe": dataframe,
+        "columns": [str(column) for column in dataframe.columns],
+        "row_count": len(dataframe.index),
+    }
+
+
+def load_uploaded_file(uploaded_file):
+    return parse_uploaded_file(uploaded_file).documents
 
 
 def extract_tabular_assets(uploaded_file):
@@ -357,33 +498,4 @@ def extract_tabular_assets(uploaded_file):
     if extension not in TABULAR_EXTENSIONS:
         return []
 
-    assets = []
-    if extension in {".xlsx", ".xlsm"}:
-        frames = _read_excel_frames(uploaded_file)
-        for sheet_name, dataframe in frames:
-            assets.append(
-                {
-                    "asset_id": f"{source_name}::{sheet_name}",
-                    "source": source_name,
-                    "sheet": sheet_name,
-                    "file_type": extension.lstrip("."),
-                    "dataframe": dataframe,
-                    "columns": [str(column) for column in dataframe.columns],
-                    "row_count": len(dataframe.index),
-                }
-            )
-    else:
-        dataframe = _read_delimited_frame(uploaded_file, extension)
-        assets.append(
-            {
-                "asset_id": f"{source_name}::Data",
-                "source": source_name,
-                "sheet": "Data",
-                "file_type": extension.lstrip("."),
-                "dataframe": dataframe,
-                "columns": [str(column) for column in dataframe.columns],
-                "row_count": len(dataframe.index),
-            }
-        )
-
-    return assets
+    return parse_uploaded_file(uploaded_file).tabular_assets
