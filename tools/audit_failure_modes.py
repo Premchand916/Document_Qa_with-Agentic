@@ -210,8 +210,8 @@ def merged_sources():
 def lexical_normalization():
     docs = tuple(Document(page_content=t) for t in ["Refund eligibility", "Solar panels", "River levels"])
     bm25, _ = retrieval._get_or_build_bm25(123456, docs)
-    exact = float(bm25.get_scores(["Refund"])[0])
-    variant = float(bm25.get_scores(["refund?"])[0])
+    exact = float(bm25.get_scores(retrieval._tokens("Refund"))[0])
+    variant = float(bm25.get_scores(retrieval._tokens("refund?"))[0])
     return exact > 0 and variant == 0, {"exact_score": exact, "variant_score": variant}
 
 
@@ -219,8 +219,7 @@ def lexical_normalization():
 def irrelevant_evidence():
     docs = [Document(page_content=t) for t in ["solar panel output", "river water level", "garden rose petals"]]
     vs = SimpleNamespace(docstore=SimpleNamespace(_dict=dict(enumerate(docs))), similarity_search=lambda query, k: [])
-    with patch.object(retrieval, "rerank_documents", side_effect=lambda q, ds, top_k: ds[:top_k]):
-        result = retrieval.retriever_agent({"query": "xylophone warranty", "vectorstore": vs})
+    result = retrieval.retriever_agent({"query": "xylophone warranty", "vectorstore": vs})
     return bool(result["documents"]), {"vector_hits": 0, "lexical_overlap": 0, "returned_chunks": len(result["documents"])}
 
 
@@ -228,10 +227,12 @@ def irrelevant_evidence():
 def cached_reranker_failure():
     reranker.get_reranker_model.cache_clear()
     try:
-        with patch.object(reranker, "CrossEncoder", side_effect=[RuntimeError("model unavailable"), object()]) as loader:
+        with patch.object(reranker.time, "monotonic", side_effect=[0.0, 1.0, 6.0]), \
+                patch.object(reranker, "CrossEncoder", side_effect=[RuntimeError("model unavailable"), object()]) as loader:
             first = reranker.get_reranker_model()
             second = reranker.get_reranker_model()
-        return first is None and second is None and loader.call_count == 1, {"loader_calls": loader.call_count, "second_result_is_none": second is None}
+            third = reranker.get_reranker_model()
+        return first is None and second is None and third is None, {"loader_calls": loader.call_count, "recovered_after_retry": third is not None}
     finally:
         reranker.get_reranker_model.cache_clear()
 

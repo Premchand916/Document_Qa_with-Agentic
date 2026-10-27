@@ -1,6 +1,6 @@
 # RAG Architecture Implementation Plan
 
-**Status: Steps 0–2 implemented; Step 3 in progress; Steps 4–5 local acceptance cases pass; Step 6 first slice implemented, 27 October 2026.** See [baseline results](BASELINE.md), [Step 1 boundaries](STEP1_RESULTS.md), [Step 2 storage results](STEP2_RESULTS.md), [Step 3 progress](STEP3_RESULTS.md), [Step 4 results](STEP4_RESULTS.md), [Step 5 results](STEP5_RESULTS.md), and [Step 6 progress](STEP6_RESULTS.md). There are 110 passing offline tests and 6 remaining reproduced diagnostic limitations. Shared identity-provider deployment remains unconfigured. This plan translates the [architecture audit](../ARCHITECTURE_REVIEW.md) into reviewable steps; confirmed failures and untested attack hypotheses remain separate.
+**Status: Steps 0–2 implemented; Step 3 in progress; Steps 4–5 and 7 local acceptance cases pass; Step 6 first slice implemented, 27 October 2026.** See [baseline results](BASELINE.md), [Step 1 boundaries](STEP1_RESULTS.md), [Step 2 storage results](STEP2_RESULTS.md), [Step 3 progress](STEP3_RESULTS.md), [Step 4 results](STEP4_RESULTS.md), [Step 5 results](STEP5_RESULTS.md), [Step 6 progress](STEP6_RESULTS.md), and [Step 7 results](STEP7_RESULTS.md). There are 116 passing offline tests and 2 remaining reproduced diagnostic limitations. Shared identity-provider deployment remains unconfigured. This plan translates the [architecture audit](../ARCHITECTURE_REVIEW.md) into reviewable steps; confirmed failures and untested attack hypotheses remain separate.
 
 ## Outcome and architecture decisions
 
@@ -159,6 +159,8 @@ Use a durable checkpointer: an in-memory saver cannot meet restart requirements.
 
 ## Step 7 — Hybrid retrieval and reranker lifecycle
 
+**Local acceptance cases pass:** stable chunk IDs preserve duplicate-text provenance, normalized lexical matching excludes zero-overlap candidates, an empty evidence set produces an explicit insufficient-evidence status, bounded versioned BM25 caching replaces unscoped vector caching, and retryable reranker loading reports fallback and validates scores. R01–R04 no longer reproduce. Real-model quality/latency and calibrated FAISS sufficiency remain open. See [Step 7 results](STEP7_RESULTS.md).
+
 **Covers:** R01–R04; provenance loss, weak evidence, stale caches, active `retrieval/reranker.py` concerns.
 
 **Implement:** normalize BM25 consistently while preserving domain identifiers; discard zero-match lexical candidates. Fuse by stable chunk IDs and retain all source references for duplicate text. Key caches by workspace, corpus version, retrieval configuration, query, and count; bound memory and invalidate explicitly.
@@ -232,4 +234,4 @@ The requested general assistant is a separate product scope beyond document QA. 
 - **C — Steps 6–8:** durable conversations, observable retrieval/reranking, evidence-based answers. Demonstrate an end-to-end follow-up.
 - **D — Steps 9–11:** optional episodic recall, measured operations, migration/scale decisions. Demonstrate release evidence.
 
-**Next implementation action: start Step 7 retrieval provenance and reranker lifecycle while measuring Step 3 parser resources and scanned-document OCR.** Step 6's first durable-conversation slice is in place, with its remaining gate items recorded above. Step 2 completes checkpoint A in code; Step 4's local compatibility gate and Step 5's table cases pass. Checkpoint B remains open for Step 3 resource evidence. Production rollout has not occurred. Identity-provider deployment, workload targets, mobile layout, and storage-retention policies remain open. Passing checks do not establish production readiness.
+**Next implementation action: start Step 8 graph simplification and citation verification while measuring Step 3 parser resources and scanned-document OCR.** Step 6's first durable-conversation slice is in place, with its remaining gate items recorded above. Step 2 completes checkpoint A in code; Steps 4, 5, and 7 pass local cases. Checkpoint B remains open for Step 3 resource evidence. Production rollout has not occurred. Identity-provider deployment, workload targets, mobile layout, and storage-retention policies remain open. Passing checks do not establish production readiness.

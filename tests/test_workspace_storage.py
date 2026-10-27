@@ -245,12 +245,15 @@ class WorkspaceApiTests(OfflineCase):
     def test_workspace_retrieval_does_not_retain_global_corpus_cache(self):
         import agents.retriever_agent as retrieval
         vectorstore = self.seed_workspace()
-        with patch.object(retrieval, "rerank_documents", side_effect=lambda q, ds, top_k: ds[:top_k]):
+        from retrieval.reranker import RerankResult
+        with patch.object(retrieval, "rerank_with_status", side_effect=lambda q, ds, top_k:
+                          RerankResult(ds[:top_k], None, None, "fallback", "test")):
             result = retrieval.retriever_agent({"query": "alpha", "vectorstore": vectorstore,
-                                                "request_context": {"workspace_id": "local"}})
+                                                "request_context": {"workspace_id": "local"},
+                                                "corpus_version": "test-version"})
         self.assertTrue(result["documents"])
         self.assertEqual(retrieval._VECTORSTORE_REGISTRY, {})
-        self.assertEqual(retrieval._BM25_CACHE, {})
+        self.assertEqual(list(retrieval._BM25_CACHE), [("local", "test-version", retrieval.TOKENIZER_VERSION)])
 
     def test_real_graph_passes_provider_to_every_model_node(self):
         from langgraph_flow.graph_builder import build_graph

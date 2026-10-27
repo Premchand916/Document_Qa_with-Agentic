@@ -1,15 +1,22 @@
-"""FAISS + BM25 hybrid retrieval with Reciprocal Rank Fusion (RRF)."""
-from functools import lru_cache
+"""Workspace-scoped FAISS and BM25 retrieval with provenance-preserving fusion."""
+
+from collections import OrderedDict
+import re
+from threading import Lock
 
 from rank_bm25 import BM25Okapi
 
-from retrieval.reranker import rerank_documents
+from retrieval.reranker import rerank_with_status
 
-_VECTORSTORE_REGISTRY: dict = {}
-_BM25_CACHE: dict = {}
 RRF_K = 60
+TOKENIZER_VERSION = "unicode-identifiers-v1"
+MAX_BM25_INDEXES = 4
+_BM25_CACHE: OrderedDict[tuple, tuple] = OrderedDict()
+_CACHE_LOCK = Lock()
 
-# Intent-driven retrieval budget
+# Legacy import path. The pinned corpus snapshot now owns vectorstores.
+_VECTORSTORE_REGISTRY: dict = {}
+
 _INTENT_CONFIG = {
     "data_analysis":       {"k_vector": 4, "k_bm25": 6, "k_final": 4},
     "document_comparison": {"k_vector": 6, "k_bm25": 6, "k_final": 6},
@@ -23,77 +30,96 @@ _DEFAULT_CONFIG = {"k_vector": 5, "k_bm25": 5, "k_final": 4}
 
 
 def clear_retrieval_caches() -> None:
+    with _CACHE_LOCK:
+        _BM25_CACHE.clear()
     _VECTORSTORE_REGISTRY.clear()
-    _BM25_CACHE.clear()
-    _cached_vector_search.cache_clear()
 
 
-@lru_cache(maxsize=200)
-def _cached_vector_search(query: str, vectorstore_id: int, k: int):
-    vs = _VECTORSTORE_REGISTRY[vectorstore_id]
-    return tuple(vs.similarity_search(query, k=k))
+def _tokens(text: str) -> list[str]:
+    """Case-fold words while preserving complete invoice/version identifiers."""
+    return re.findall(r"(?u)\b\w+(?:[-./]\w+)*\b", text.casefold())
 
 
 def _get_or_build_bm25(vectorstore_id: int, all_docs: tuple):
-    if vectorstore_id not in _BM25_CACHE:
-        corpus = [doc.page_content.split() for doc in all_docs]
-        _BM25_CACHE[vectorstore_id] = (BM25Okapi(corpus), all_docs)
-    return _BM25_CACHE[vectorstore_id]
+    """Legacy entry point; unscoped callers never retain another corpus."""
+    del vectorstore_id
+    return BM25Okapi([_tokens(doc.page_content) for doc in all_docs]), all_docs
+
+
+def _build_bm25_index(all_docs: tuple):
+    tokens = [_tokens(doc.page_content) for doc in all_docs]
+    if not any(tokens):
+        return None, all_docs, [set() for _ in tokens]
+    return BM25Okapi(tokens), all_docs, [set(item) for item in tokens]
+
+
+def _workspace_bm25(state: dict, all_docs: tuple):
+    context = state.get("request_context") or {}
+    workspace, version = context.get("workspace_id"), state.get("corpus_version")
+    if not workspace or not version:
+        return _build_bm25_index(all_docs)
+    key = (workspace, version, TOKENIZER_VERSION)
+    with _CACHE_LOCK:
+        cached = _BM25_CACHE.get(key)
+        if cached is not None:
+            _BM25_CACHE.move_to_end(key)
+            return cached
+    built = _build_bm25_index(all_docs)
+    with _CACHE_LOCK:
+        cached = _BM25_CACHE.setdefault(key, built)
+        _BM25_CACHE.move_to_end(key)
+        while len(_BM25_CACHE) > MAX_BM25_INDEXES:
+            _BM25_CACHE.popitem(last=False)
+        return cached
+
+
+def _document_key(doc):
+    chunk_id = doc.metadata.get("chunk_id")
+    return ("chunk", str(chunk_id)) if chunk_id else ("object", id(doc))
 
 
 def _rrf_fusion(ranked_lists: list, k: int = RRF_K) -> list:
-    """Reciprocal Rank Fusion: score(d) = Σ 1/(k + rank_i + 1) across N lists."""
+    """Fuse by stable chunk ID, retaining separate identical-text sources."""
     scores: dict = {}
     doc_map: dict = {}
     for ranked in ranked_lists:
+        seen = set()
         for rank, doc in enumerate(ranked):
-            key = hash(doc.page_content)
-            if key not in scores:
-                scores[key] = 0.0
-                doc_map[key] = doc
-            scores[key] += 1.0 / (k + rank + 1)
-    return [doc_map[dk] for dk in sorted(scores, key=lambda dk: scores[dk], reverse=True)]
+            key = _document_key(doc)
+            if key in seen:
+                continue
+            seen.add(key)
+            scores[key] = scores.get(key, 0.0) + 1.0 / (k + rank + 1)
+            doc_map.setdefault(key, doc)
+    return [doc_map[key] for key in sorted(scores, key=lambda item: scores[item], reverse=True)]
 
 
 def retriever_agent(state: dict) -> dict:
     query = state.get("search_query") or state["query"]
     vectorstore = state["vectorstore"]
-    intent = state.get("intent", "document_qa")
-    cfg = _INTENT_CONFIG.get(intent, _DEFAULT_CONFIG)
+    cfg = _INTENT_CONFIG.get(state.get("intent"), _DEFAULT_CONFIG)
     k_vector, k_bm25, k_final = cfg["k_vector"], cfg["k_bm25"], cfg["k_final"]
 
-    vs_id = id(vectorstore)
-    scoped = bool(state.get("request_context", {}).get("workspace_id"))
-    if not scoped:
-        _VECTORSTORE_REGISTRY[vs_id] = vectorstore
+    vector_docs = vectorstore.similarity_search(query, k=k_vector)
+    all_docs = tuple(vectorstore.docstore._dict.values())
+    bm25_docs = []
+    if all_docs and _tokens(query):
+        bm25, indexed_docs, token_sets = _workspace_bm25(state, all_docs)
+        query_tokens = _tokens(query)
+        query_set = set(query_tokens)
+        if bm25 is not None:
+            scores = bm25.get_scores(query_tokens)
+            matching = [index for index, tokens in enumerate(token_sets) if query_set.intersection(tokens)]
+            top_indexes = sorted(matching, key=lambda index: scores[index], reverse=True)[:k_bm25]
+            bm25_docs = [indexed_docs[index] for index in top_indexes]
 
-    # ── FAISS semantic retrieval ──────────────────────────────────────────────
-    vector_docs = (vectorstore.similarity_search(query, k=k_vector) if scoped
-                   else list(_cached_vector_search(query, vs_id, k_vector)))
-
-    # ── BM25 lexical retrieval ────────────────────────────────────────────────
-    all_docs_list = list(vectorstore.docstore._dict.values())
-    if not all_docs_list:
-        state["retrieved_docs"] = vector_docs
-        state["documents"] = vector_docs[:k_final]
-        return state
-
-    if scoped:
-        indexed_docs = tuple(all_docs_list)
-        bm25 = BM25Okapi([doc.page_content.split() for doc in indexed_docs])
-    else:
-        bm25, indexed_docs = _get_or_build_bm25(vs_id, tuple(all_docs_list))
-    bm25_scores = bm25.get_scores(query.split())
-    top_bm25_idx = sorted(range(len(bm25_scores)), key=lambda i: bm25_scores[i], reverse=True)[:k_bm25]
-    bm25_docs = [indexed_docs[i] for i in top_bm25_idx]
-
-    # ── RRF fusion ────────────────────────────────────────────────────────────
     fused = _rrf_fusion([vector_docs, bm25_docs])
-
-    # ── Cross-encoder reranking on the fused pool ─────────────────────────────
-    candidate_pool = fused[: min(len(fused), k_final * 2)]
-    final_docs = rerank_documents(query, candidate_pool, top_k=k_final)
-
+    candidates = fused[:min(len(fused), k_final * 2)]
+    ranked = rerank_with_status(query, candidates, top_k=k_final)
     state["retrieved_docs"] = fused
-    state["documents"] = final_docs if final_docs else fused[:k_final]
+    state["documents"] = ranked.documents
+    state["retrieval_status"] = {
+        "vector_hits": len(vector_docs), "lexical_hits": len(bm25_docs),
+        "candidate_count": len(candidates), "reranker": ranked.to_status(),
+    }
     return state

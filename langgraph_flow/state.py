@@ -13,6 +13,7 @@ class AgentState(TypedDict, total=False):
     # ── Retrieved content ──────────────────────────────────────────────────────
     documents: List[Any]                # LangChain Document objects (from retriever or web search)
     retrieved_docs: List[Any]           # Raw retrieved docs before dedup/rerank (retriever only)
+    retrieval_status: Dict[str, Any]     # Candidate counts, reranker scores and fallback status
     source: str                         # Primary source string shown in UI
     sources: List[str]                  # All source references (used by react/writer agents)
 
@@ -22,7 +23,7 @@ class AgentState(TypedDict, total=False):
     use_tool: bool                      # If True, route to dataframe_tool; else retriever
     tool_plan: Dict[str, Any]           # Validated table operation/source/filter plan
     tool_result: Dict[str, Any]         # Exact computed result and row provenance
-    result_status: str                  # answered | needs_clarification
+    result_status: str                  # answered | needs_clarification | insufficient_evidence
     response_plan: Dict[str, Any]       # Strategy dict from response_planner
     draft_answer: str                   # Intermediate draft (react_agent → writer_agent)
 

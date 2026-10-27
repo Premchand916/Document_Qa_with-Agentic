@@ -32,6 +32,7 @@ def qa_agent(state):
     if not docs:
         if state.get("response"):
             return state
+        state["result_status"] = "insufficient_evidence"
         state["response"] = (
             "No relevant information found. "
             + ("Try a different search query." if is_web else
