@@ -168,6 +168,29 @@ class IngestionTests(OfflineCase):
         self.assertEqual(parsed.extraction_report["ocr_pages"], [1])
         self.assertEqual(engine.call_args.kwargs["timeout"], loader.OCR_PAGE_TIMEOUT)
 
+    def test_ocr_preprocessing_corrects_rotation_and_removes_isolated_noise(self):
+        import ingestion.file_loader as loader
+        from PIL import Image
+        rotated = Image.new("L", (100, 50), 255)
+        with patch("pytesseract.image_to_osd", return_value={"rotate": 90}):
+            prepared, metadata = loader._prepare_ocr_image(rotated)
+        self.assertEqual(prepared.size, (50, 100))
+        self.assertEqual(metadata["ocr_rotation_degrees"], 90)
+        self.assertTrue(metadata["ocr_preprocessed"])
+
+        noisy = Image.new("L", (9, 9), 255)
+        noisy.putpixel((4, 4), 0)
+        with patch.dict(os.environ, {"DOCQA_OCR_AUTO_ROTATE": "false"}):
+            cleaned, _ = loader._prepare_ocr_image(noisy)
+        self.assertEqual(cleaned.getpixel((4, 4)), 255)
+
+    def test_requested_ocr_languages_must_be_installed(self):
+        import ingestion.file_loader as loader
+        with patch.dict(os.environ, {"DOCQA_OCR_LANGUAGES": "eng+hin"}), \
+                patch.object(loader, "_installed_tesseract_languages", return_value=frozenset({"eng"})):
+            with self.assertRaisesRegex(loader.OCRConfigurationError, "hin"):
+                loader._ocr_languages()
+
     def test_cloud_ocr_requires_explicit_opt_in(self):
         import ingestion.file_loader as loader
         from PIL import Image

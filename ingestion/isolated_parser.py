@@ -4,16 +4,22 @@ from io import BytesIO, StringIO
 import json
 import multiprocessing
 import sys
+import time
 
 import pandas as pd
+import psutil
 from langchain_core.documents import Document
 
-from ingestion.file_loader import IngestionLimitError, OCRRequiredError, ParsedFile, parse_uploaded_file
+from ingestion.file_loader import (IngestionLimitError, OCRConfigurationError, OCRRequiredError,
+                                   ParsedFile, parse_uploaded_file)
 
 DEFAULT_PARSE_TIMEOUT = 30.0
 MAX_RESULT_BYTES = 64 * 1024 * 1024
 MAX_WORKER_ADDRESS_SPACE = 2 * 1024 * 1024 * 1024
+MAX_WORKER_RSS_GROWTH = 512 * 1024 * 1024
+MAX_WORKER_RSS = 1536 * 1024 * 1024
 MAX_PARSE_INPUT_BYTES = 10 * 1024 * 1024
+RESOURCE_POLL_INTERVAL = 0.05
 
 
 class ParserTimeoutError(Exception):
@@ -30,6 +36,25 @@ def _limit_worker_memory():
     if sys.platform == "linux":
         import resource
         resource.setrlimit(resource.RLIMIT_AS, (MAX_WORKER_ADDRESS_SPACE, MAX_WORKER_ADDRESS_SPACE))
+
+
+def _worker_resident_bytes(process_id: int) -> int:
+    """Return worker plus descendant RSS; missing short-lived processes count as zero."""
+    try:
+        process = psutil.Process(process_id)
+        resident = process.memory_info().rss
+        try:
+            descendants = process.children(recursive=True)
+        except (psutil.NoSuchProcess, psutil.AccessDenied, PermissionError):
+            return resident
+        for child in descendants:
+            try:
+                resident += child.memory_info().rss
+            except (psutil.NoSuchProcess, psutil.AccessDenied, PermissionError):
+                continue
+        return resident
+    except (psutil.NoSuchProcess, psutil.AccessDenied, PermissionError):
+        return 0
 
 
 def _encode_result(parsed: ParsedFile) -> dict:
@@ -54,9 +79,17 @@ def _decode_result(payload: dict) -> ParsedFile:
     return ParsedFile(documents, assets, payload["warnings"], payload["extraction_report"])
 
 
+def _send_response(connection, response: dict) -> None:
+    encoded = json.dumps(response, ensure_ascii=False, allow_nan=False, separators=(",", ":")).encode("utf-8")
+    if len(encoded) > MAX_RESULT_BYTES:
+        encoded = b'{"status":"limit"}'
+    connection.send_bytes(encoded)
+
+
 def _worker(connection, name: str, content: bytes):
     try:
         _limit_worker_memory()
+        _send_response(connection, {"status": "ready", "baseline_rss": psutil.Process().memory_info().rss})
         file_obj = BytesIO(content)
         file_obj.name = name
         response = {"status": "ok", "result": _encode_result(parse_uploaded_file(file_obj))}
@@ -64,15 +97,31 @@ def _worker(connection, name: str, content: bytes):
         response = {"status": "limit"}
     except OCRRequiredError:
         response = {"status": "ocr_required"}
+    except OCRConfigurationError:
+        response = {"status": "ocr_configuration"}
     except Exception:
         response = {"status": "invalid"}
     try:
-        encoded = json.dumps(response, ensure_ascii=False, allow_nan=False, separators=(",", ":")).encode("utf-8")
-        if len(encoded) > MAX_RESULT_BYTES:
-            encoded = b'{"status":"limit"}'
-        connection.send_bytes(encoded)
+        _send_response(connection, response)
     finally:
         connection.close()
+
+
+def _receive_response(parent, process, deadline: float, rss_limit: int) -> dict:
+    while True:
+        if _worker_resident_bytes(process.pid) > rss_limit:
+            raise IngestionLimitError("Parser resident-memory limit exceeded")
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise ParserTimeoutError()
+        if parent.poll(min(RESOURCE_POLL_INTERVAL, remaining)):
+            return json.loads(parent.recv_bytes(MAX_RESULT_BYTES))
+        if not process.is_alive():
+            raise ParserUnavailableError("Parser process exited before returning a result")
+
+
+def _worker_rss_limit(baseline_rss: int) -> int:
+    return min(MAX_WORKER_RSS, max(0, baseline_rss) + MAX_WORKER_RSS_GROWTH)
 
 
 def parse_in_isolated_process(name: str, content: bytes, *, timeout: float = DEFAULT_PARSE_TIMEOUT) -> ParsedFile:
@@ -88,14 +137,18 @@ def parse_in_isolated_process(name: str, content: bytes, *, timeout: float = DEF
         process.start()
         started = True
         child.close()
-        if not parent.poll(timeout):
-            raise ParserTimeoutError()
-        response = json.loads(parent.recv_bytes(MAX_RESULT_BYTES))
+        deadline = time.monotonic() + timeout
+        response = _receive_response(parent, process, deadline, MAX_WORKER_RSS)
+        if response.get("status") == "ready":
+            baseline_rss = max(0, int(response.get("baseline_rss", 0)))
+            response = _receive_response(parent, process, deadline, _worker_rss_limit(baseline_rss))
         status = response.get("status")
         if status == "limit":
             raise IngestionLimitError("Parser resource limit exceeded")
         if status == "ocr_required":
             raise OCRRequiredError("PDF requires OCR")
+        if status == "ocr_configuration":
+            raise OCRConfigurationError("Local OCR configuration is unavailable")
         if status != "ok":
             raise ValueError("Document parser could not read the file")
         return _decode_result(response["result"])

@@ -98,9 +98,10 @@ class UploadBoundaryTests(OfflineCase):
         self.assertNotIn("SYNTHETIC_PARSER_SECRET", response.text)
 
     def test_ocr_and_parser_limits_have_actionable_safe_errors(self):
-        from ingestion.file_loader import IngestionLimitError, OCRRequiredError
+        from ingestion.file_loader import IngestionLimitError, OCRConfigurationError, OCRRequiredError
         for failure, status, code in ((OCRRequiredError("private path"), 422, "ocr_required"),
-                                      (IngestionLimitError("private limit detail"), 413, "request_too_large")):
+                                      (IngestionLimitError("private limit detail"), 413, "request_too_large"),
+                                      (OCRConfigurationError("private language"), 503, "ocr_not_configured")):
             with patch.object(self.server, "parse_uploaded_file", side_effect=failure):
                 response = self.client().post("/api/upload", files={"files": ("scan.pdf", b"synthetic")})
             self.assertEqual(response.status_code, status)

@@ -45,10 +45,13 @@ def embedding_identity(embedding) -> dict:
                 "special_tokens": tokenizer.special_tokens_map,
             })).hexdigest()
         modules = getattr(client, "_modules", {})
+        encode_kwargs = dict(getattr(embedding, "encode_kwargs", {}) or {})
+        # Batching changes resource use, not the embedding coordinate system.
+        encode_kwargs.pop("batch_size", None)
         config.update(
             model_name=getattr(embedding, "model_name", None),
             model_kwargs=model_kwargs,
-            encode_kwargs=getattr(embedding, "encode_kwargs", {}),
+            encode_kwargs=encode_kwargs,
             query_encode_kwargs=getattr(embedding, "query_encode_kwargs", {}),
             tokenizer_name=getattr(tokenizer, "name_or_path", None),
             tokenizer_vocab_size=getattr(tokenizer, "vocab_size", None),

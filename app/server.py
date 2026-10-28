@@ -28,7 +28,8 @@ from agents.question_generator import generate_questions
 from app.prompt_library import PROMPT_LIBRARY, get_prompt_categories
 from app.schemas import ChatRequest, ProviderRequest
 from app.security import BoundaryMiddleware, MAX_FILE_BYTES, MAX_FILES, error_response
-from ingestion.file_loader import IngestionLimitError, OCRRequiredError, parse_uploaded_file
+from ingestion.file_loader import (IngestionLimitError, OCRConfigurationError, OCRRequiredError,
+                                   parse_uploaded_file)
 from ingestion.isolated_parser import ParserTimeoutError, ParserUnavailableError, parse_in_isolated_process
 from ingestion.semantic_chunker import semantic_chunk_documents
 from langgraph_flow.graph_builder import build_graph
@@ -180,6 +181,8 @@ async def upload_files(request: Request):
             raise HTTPException(status_code=413) from None
         except OCRRequiredError:
             return error_response(422, "ocr_required", "PDF contains no extractable text. Run OCR before uploading it.", request.state.request_id)
+        except OCRConfigurationError:
+            return error_response(503, "ocr_not_configured", "Requested local OCR language packs are unavailable.", request.state.request_id)
         except ParserTimeoutError:
             return error_response(504, "parser_timeout", "Document parsing exceeded its time limit.", request.state.request_id)
         except ParserUnavailableError:

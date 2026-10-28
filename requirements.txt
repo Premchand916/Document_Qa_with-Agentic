@@ -18,3 +18,4 @@ rank-bm25
 tavily-python
 Pillow
 pytesseract
+psutil

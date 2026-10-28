@@ -1,5 +1,8 @@
 """Step 3 parser process and deadline checks."""
 
+import asyncio
+import threading
+import time
 from unittest.mock import patch
 
 from tests.support import OfflineCase
@@ -36,6 +39,56 @@ class IsolatedIngestionTests(OfflineCase):
             with self.assertRaises(IngestionLimitError):
                 isolated.parse_in_isolated_process("large.txt", b"four", timeout=1)
         self.assertEqual(multiprocessing.active_children(), [])
+
+    def test_parent_terminates_worker_over_resident_memory_limit(self):
+        import multiprocessing
+        import ingestion.isolated_parser as isolated
+        with patch.object(isolated, "_worker_resident_bytes", return_value=isolated.MAX_WORKER_RSS + 1):
+            with self.assertRaisesRegex(isolated.IngestionLimitError, "resident-memory"):
+                isolated.parse_in_isolated_process("large.txt", b"alpha", timeout=5)
+        self.assertEqual(multiprocessing.active_children(), [])
+
+    def test_linux_worker_address_space_contract(self):
+        import resource
+        import ingestion.isolated_parser as isolated
+        with patch.object(isolated.sys, "platform", "linux"), patch.object(resource, "setrlimit") as setter:
+            isolated._limit_worker_memory()
+        setter.assert_called_once_with(
+            resource.RLIMIT_AS,
+            (isolated.MAX_WORKER_ADDRESS_SPACE, isolated.MAX_WORKER_ADDRESS_SPACE),
+        )
+
+    def test_worker_rss_growth_is_relative_but_emergency_bounded(self):
+        import ingestion.isolated_parser as isolated
+        baseline = 100 * 1024 * 1024
+        self.assertEqual(isolated._worker_rss_limit(baseline),
+                         baseline + isolated.MAX_WORKER_RSS_GROWTH)
+        self.assertEqual(isolated._worker_rss_limit(isolated.MAX_WORKER_RSS),
+                         isolated.MAX_WORKER_RSS)
+
+    def test_api_runs_at_most_two_parser_jobs_concurrently(self):
+        active = 0
+        peak = 0
+        lock = threading.Lock()
+
+        def parse(name, content):
+            nonlocal active, peak
+            with lock:
+                active += 1
+                peak = max(peak, active)
+            time.sleep(0.05)
+            with lock:
+                active -= 1
+            return name
+
+        async def exercise():
+            adapters = [self.server._FileAdapter(f"{index}.txt", b"alpha") for index in range(4)]
+            with patch.object(self.server, "_PARSE_SLOTS", asyncio.Semaphore(2)), \
+                    patch.object(self.server, "parse_in_isolated_process", side_effect=parse):
+                return await asyncio.gather(*(self.server._parse_adapter(adapter) for adapter in adapters))
+
+        self.assertEqual(asyncio.run(exercise()), ["0.txt", "1.txt", "2.txt", "3.txt"])
+        self.assertEqual(peak, 2)
 
     def test_api_timeout_preserves_previous_corpus(self):
         from ingestion.isolated_parser import ParserTimeoutError

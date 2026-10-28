@@ -77,12 +77,29 @@ class EmbeddingCompatibilityTests(OfflineCase):
             result = module._load_embedding_model("cached-model", True, "")
         self.assertIsNone(result["cache_folder"])
         self.assertEqual(result["model_kwargs"], {"local_files_only": True})
+        self.assertEqual(result["encode_kwargs"], {"batch_size": 32})
         self.assertEqual(loader.call_count, 1)
         module.get_embedding_model.cache_clear()
         with patch.object(module, "_cached_model_exists", return_value=True), \
              patch.object(module, "HuggingFaceEmbeddings", side_effect=lambda **kwargs: kwargs):
             project_cached = module._load_embedding_model("cached-model", True, "")
         self.assertEqual(project_cached["cache_folder"], str(module.MODEL_CACHE_DIR))
+        module.get_embedding_model.cache_clear()
+
+    def test_embedding_batch_size_is_bounded_and_selects_cache_entry(self):
+        import embeddings.Hugging_face_embedding as module
+        module.get_embedding_model.cache_clear()
+        with patch.object(module, "HuggingFaceEmbeddings", side_effect=lambda **kwargs: kwargs):
+            with patch.dict(os.environ, {"EMBEDDING_MODEL": "cached-model", "EMBEDDING_BATCH_SIZE": "8"}):
+                first = module.get_embedding_model()
+            with patch.dict(os.environ, {"EMBEDDING_MODEL": "cached-model", "EMBEDDING_BATCH_SIZE": "16"}):
+                second = module.get_embedding_model()
+        self.assertEqual(first["encode_kwargs"]["batch_size"], 8)
+        self.assertEqual(second["encode_kwargs"]["batch_size"], 16)
+        for value in ("0", "257", "invalid"):
+            with patch.dict(os.environ, {"EMBEDDING_BATCH_SIZE": value}):
+                with self.assertRaisesRegex(ValueError, "EMBEDDING_BATCH_SIZE"):
+                    module.get_embedding_model()
         module.get_embedding_model.cache_clear()
 
     def test_loaded_weights_and_tokenizer_both_affect_fingerprint(self):
@@ -113,12 +130,14 @@ class EmbeddingCompatibilityTests(OfflineCase):
             def get_sentence_embedding_dimension(self):
                 return 2
 
-        def identity(weight, token_id):
+        def identity(weight, token_id, batch_size=32):
             return embedding_identity(SimpleNamespace(client=Client(weight, token_id), model_name="synthetic",
-                                                      model_kwargs={}, encode_kwargs={}, query_encode_kwargs={}))
+                                                      model_kwargs={}, encode_kwargs={"batch_size": batch_size},
+                                                      query_encode_kwargs={}))
 
         self.assertNotEqual(identity(1, 1), identity(2, 1))
         self.assertNotEqual(identity(1, 1), identity(1, 3))
+        self.assertEqual(identity(1, 1, 8), identity(1, 1, 64))
 
     def test_rollback_activates_only_a_compatible_saved_version(self):
         from storage.workspaces import CorpusIntegrityError, PublicationConflict

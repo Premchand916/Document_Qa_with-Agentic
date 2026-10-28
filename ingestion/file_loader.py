@@ -1,8 +1,10 @@
 import json
 import os
 import hashlib
+import re
 import zipfile
 from dataclasses import dataclass, field
+from functools import lru_cache
 from io import BytesIO
 from pathlib import Path
 
@@ -48,6 +50,8 @@ MAX_OCR_CHARS = 1_000_000
 MAX_PDF_OCR_PAGES = 5
 PDF_OCR_RESOLUTION = 200
 OCR_PAGE_TIMEOUT = 4
+OCR_ORIENTATION_TIMEOUT = 1
+DEFAULT_OCR_LANGUAGES = "eng"
 
 
 class IngestionLimitError(ValueError):
@@ -56,6 +60,10 @@ class IngestionLimitError(ValueError):
 
 class OCRRequiredError(ValueError):
     """A PDF has no extractable text and needs OCR before indexing."""
+
+
+class OCRConfigurationError(ValueError):
+    """The requested local OCR configuration is unavailable or invalid."""
 
 
 @dataclass
@@ -183,13 +191,71 @@ def _tabular_chunk_documents(dataframe, source_name, file_type, sheet_name="Data
     return documents
 
 
+def _env_enabled(name: str, default: bool) -> bool:
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+@lru_cache(maxsize=1)
+def _installed_tesseract_languages() -> frozenset[str]:
+    import pytesseract
+
+    return frozenset(pytesseract.get_languages(config=""))
+
+
+def _ocr_languages() -> str:
+    requested = os.getenv("DOCQA_OCR_LANGUAGES", DEFAULT_OCR_LANGUAGES).strip()
+    if not requested or not re.fullmatch(r"[A-Za-z0-9_]+(?:\+[A-Za-z0-9_]+)*", requested):
+        raise OCRConfigurationError("DOCQA_OCR_LANGUAGES must contain Tesseract language identifiers joined by '+'")
+    languages = requested.split("+")
+    missing = sorted(set(languages) - _installed_tesseract_languages())
+    if missing:
+        raise OCRConfigurationError(f"Tesseract language packs are unavailable: {', '.join(missing)}")
+    return "+".join(languages)
+
+
+def _prepare_ocr_image(image):
+    """Normalize scans and use Tesseract OSD to correct supported rotations."""
+    from PIL import ImageFilter, ImageOps
+    import pytesseract
+
+    image = ImageOps.exif_transpose(image)
+    width, height = image.size
+    if width <= 0 or height <= 0 or width * height > MAX_IMAGE_PIXELS:
+        raise IngestionLimitError(f"Image exceeds {MAX_IMAGE_PIXELS} pixels")
+    prepared = image.convert("L")
+    preprocessed = _env_enabled("DOCQA_OCR_PREPROCESS", True)
+    if preprocessed:
+        prepared = ImageOps.autocontrast(prepared).filter(ImageFilter.MedianFilter(size=3))
+
+    rotation = 0
+    if _env_enabled("DOCQA_OCR_AUTO_ROTATE", True):
+        try:
+            osd = pytesseract.image_to_osd(
+                prepared, output_type=pytesseract.Output.DICT, timeout=OCR_ORIENTATION_TIMEOUT
+            )
+            candidate = int(osd.get("rotate") or 0) % 360
+            if candidate in {90, 180, 270}:
+                prepared = prepared.rotate(candidate, expand=True, fillcolor=255)
+                rotation = candidate
+        except (RuntimeError, ValueError, TypeError, OSError):
+            # Sparse pages commonly lack enough characters for orientation
+            # detection; normal OCR remains useful and bounded in that case.
+            pass
+    return prepared, {"ocr_languages": os.getenv("DOCQA_OCR_LANGUAGES", DEFAULT_OCR_LANGUAGES).strip(),
+                      "ocr_preprocessed": preprocessed,
+                      "ocr_rotation_degrees": rotation}
+
+
 def _tesseract_text(image) -> str:
     import pytesseract
 
     width, height = image.size
     if width <= 0 or height <= 0 or width * height > MAX_IMAGE_PIXELS:
         raise IngestionLimitError(f"Image exceeds {MAX_IMAGE_PIXELS} pixels")
-    text = pytesseract.image_to_string(image, config="--psm 6", timeout=OCR_PAGE_TIMEOUT)
+    text = pytesseract.image_to_string(image, lang=_ocr_languages(), config="--psm 6", timeout=OCR_PAGE_TIMEOUT)
     if len(text) > MAX_OCR_CHARS:
         raise IngestionLimitError(f"OCR output exceeds {MAX_OCR_CHARS} characters")
     return text.strip()
@@ -207,8 +273,9 @@ def _ocr_pdf_pages(raw: bytes, source_name: str, page_numbers: list[int]) -> tup
                     if scaled_pixels > MAX_IMAGE_PIXELS:
                         raise IngestionLimitError(f"Rendered PDF page exceeds {MAX_IMAGE_PIXELS} pixels")
                     image = page.to_image(resolution=PDF_OCR_RESOLUTION).original
-                    text = _tesseract_text(image)
-                except IngestionLimitError:
+                    prepared, ocr_metadata = _prepare_ocr_image(image)
+                    text = _tesseract_text(prepared)
+                except (IngestionLimitError, OCRConfigurationError):
                     raise
                 except Exception:
                     failed.append(page_number)
@@ -220,9 +287,9 @@ def _ocr_pdf_pages(raw: bytes, source_name: str, page_numbers: list[int]) -> tup
                     "source": source_name, "page": page_number, "file_type": "pdf",
                     "content_type": "ocr_text", "ocr_engine": "tesseract",
                     "coordinate_status": "raster_page", "ocr_resolution_dpi": PDF_OCR_RESOLUTION,
-                    "page_size": [float(page.width), float(page.height)],
+                    "page_size": [float(page.width), float(page.height)], **ocr_metadata,
                 }))
-    except IngestionLimitError:
+    except (IngestionLimitError, OCRConfigurationError):
         raise
     except Exception:
         return [], list(page_numbers[:MAX_PDF_OCR_PAGES])
@@ -393,7 +460,8 @@ def load_image_ocr(file_obj, source_name):
             image.seek(frame)
             if image.width <= 0 or image.height <= 0 or image.width * image.height > MAX_IMAGE_PIXELS:
                 raise IngestionLimitError(f"Image exceeds {MAX_IMAGE_PIXELS} pixels")
-            text = _tesseract_text(image.convert("RGB"))
+            prepared, ocr_metadata = _prepare_ocr_image(image.copy())
+            text = _tesseract_text(prepared)
             total_chars += len(text)
             if total_chars > MAX_OCR_CHARS:
                 raise IngestionLimitError(f"OCR output exceeds {MAX_OCR_CHARS} characters")
@@ -401,13 +469,13 @@ def load_image_ocr(file_obj, source_name):
                 documents.append(Document(page_content=text, metadata={
                     "source": source_name, "page": str(frame + 1),
                     "file_type": extension.lstrip("."), "content_type": "ocr_text",
-                    "ocr_engine": "tesseract", "image_size": list(image.size),
+                    "ocr_engine": "tesseract", "image_size": list(image.size), **ocr_metadata,
                 }))
         if documents:
             return documents
     except ImportError:
         pass
-    except IngestionLimitError:
+    except (IngestionLimitError, OCRConfigurationError):
         raise
     except Exception:
         pass

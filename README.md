@@ -142,7 +142,12 @@ Create a .env file:
 ```dotenv
 GOOGLE_API_KEY=your_api_key
 HF_LOCAL_FILES_ONLY=true
+EMBEDDING_BATCH_SIZE=32
 DOCQA_AUTH_MODE=local
+# Tesseract packs must be installed locally; join multiple identifiers with +
+DOCQA_OCR_LANGUAGES=eng
+DOCQA_OCR_PREPROCESS=true
+DOCQA_OCR_AUTO_ROTATE=true
 # Optional and explicit: permits image bytes to leave the machine for cloud OCR
 DOCQA_ALLOW_CLOUD_OCR=false
 ```
