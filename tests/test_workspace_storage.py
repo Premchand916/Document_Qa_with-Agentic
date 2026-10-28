@@ -267,5 +267,6 @@ class WorkspaceApiTests(OfflineCase):
                 patch("retrieval.reranker.get_reranker_model", return_value=None):
             result = client.post("/api/chat", headers=self.headers(), json={"query": "alpha"})
         self.assertEqual(result.status_code, 200)
-        for model in (intent, planner, qa):
+        intent.assert_not_called()
+        for model in (planner, qa):
             self.assertEqual(model.call_args.kwargs["provider"], "gemini")

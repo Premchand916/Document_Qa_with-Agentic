@@ -38,7 +38,7 @@ import embeddings.Hugging_face_embedding as embedding_module
 from ingestion.file_loader import _normalize_dataframe
 from ingestion.semantic_chunker import semantic_chunk_documents
 import langgraph_flow.graph_builder as graph_builder
-from memory.conversation_memory import get_memory
+from memory.conversation_memory import SimpleConversationMemory, get_memory
 import retrieval.reranker as reranker
 import utils.prompt_skill as prompt_skill
 import vector_Store.faiss_store as store_module
@@ -141,15 +141,16 @@ def malformed_history():
 
 @probe("M03", "Memory factory does not recover a previous conversation", "memory/conversation_memory.py:51")
 def fresh_memory():
-    first = get_memory()
-    first.add_user_message("remember alpha")
-    second = get_memory()
-    return not second.messages, {"first_messages": len(first.messages), "new_instance_messages": len(second.messages)}
+    try:
+        get_memory()
+    except RuntimeError as exc:
+        return False, {"legacy_helper_retired": True, "message": str(exc)}
+    return True, {"legacy_helper_retired": False}
 
 
 @probe("M04", "Returned memory messages allow mutation of the stored history", "memory/conversation_memory.py:17")
 def shallow_memory_copy():
-    memory = get_memory()
+    memory = SimpleConversationMemory()
     memory.add_user_message("original")
     memory.load_memory_variables()["chat_history"][0]["content"] = "changed"
     return memory.messages[0]["content"] == "changed", {"stored_content": memory.messages[0]["content"]}
@@ -396,12 +397,17 @@ def unsupported_upload_control():
 
 def trace_workflows():
     traces = {}
-    for name, extra in (("document", {}), ("table", {"tabular_assets": [asset("sales.csv", 10)], "uploaded_file_types": ["CSV"]}), ("web", {"use_web_search": True})):
+    cases = (
+        ("document", "alpha policy", {}),
+        ("table", "total amount", {"tabular_assets": [asset("sales.csv", 10)], "uploaded_file_types": ["CSV"]}),
+        ("web", "current alpha policy", {"use_web_search": True}),
+    )
+    for name, query, extra in cases:
         with graph_models() as models, \
                 patch.object(graph_builder, "retriever_agent", side_effect=lambda s: {**s, "documents": documents()}), \
                 patch.object(graph_builder, "web_search_agent", side_effect=lambda s: {**s, "documents": documents()}):
             graph = graph_builder.build_graph()
-            updates = list(graph.stream({"query": "alpha policy", "vectorstore": object(), **extra}, stream_mode="updates"))
+            updates = list(graph.stream({"query": query, "vectorstore": object(), **extra}, stream_mode="updates"))
             traces[name] = {"executed_nodes": [node for update in updates for node in update], "model_calls": sum(model.call_count for model in models), "checkpointer_configured": graph.checkpointer is not None}
     return traces
 

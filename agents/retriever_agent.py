@@ -120,6 +120,7 @@ def retriever_agent(state: dict) -> dict:
     state["documents"] = ranked.documents
     state["retrieval_status"] = {
         "vector_hits": len(vector_docs), "lexical_hits": len(bm25_docs),
-        "candidate_count": len(candidates), "reranker": ranked.to_status(),
+        "candidate_count": len(candidates), "retrieval_attempts": 1, "max_retrieval_attempts": 1,
+        "reranker": ranked.to_status(),
     }
     return state

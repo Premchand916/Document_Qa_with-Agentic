@@ -1,6 +1,6 @@
 # RAG Architecture Implementation Plan
 
-**Status: Steps 0–2 implemented; Step 3 in progress; Steps 4–5 and 7 local acceptance cases pass; Step 6 first slice implemented, 27 October 2026.** See [baseline results](BASELINE.md), [Step 1 boundaries](STEP1_RESULTS.md), [Step 2 storage results](STEP2_RESULTS.md), [Step 3 progress](STEP3_RESULTS.md), [Step 4 results](STEP4_RESULTS.md), [Step 5 results](STEP5_RESULTS.md), [Step 6 progress](STEP6_RESULTS.md), and [Step 7 results](STEP7_RESULTS.md). There are 116 passing offline tests and 2 remaining reproduced diagnostic limitations. Shared identity-provider deployment remains unconfigured. This plan translates the [architecture audit](../ARCHITECTURE_REVIEW.md) into reviewable steps; confirmed failures and untested attack hypotheses remain separate.
+**Status: Steps 0–2 implemented; Step 3 in progress; Steps 4–5 and 7–8 local acceptance cases pass; Step 6 first slice implemented, 28 October 2026.** See [baseline results](BASELINE.md), [Step 1 boundaries](STEP1_RESULTS.md), [Step 2 storage results](STEP2_RESULTS.md), [Step 3 progress](STEP3_RESULTS.md), [Step 4 results](STEP4_RESULTS.md), [Step 5 results](STEP5_RESULTS.md), [Step 6 progress](STEP6_RESULTS.md), [Step 7 results](STEP7_RESULTS.md), and [Step 8 results](STEP8_RESULTS.md). There are 123 passing offline tests and no reproduced diagnostic defects; one rejection control passes with no probe errors. Shared identity-provider deployment remains unconfigured. This plan translates the [architecture audit](../ARCHITECTURE_REVIEW.md) into reviewable steps; confirmed failures and untested attack hypotheses remain separate.
 
 ## Outcome and architecture decisions
 
@@ -175,6 +175,8 @@ Calibrate evidence sufficiency on labeled data. RRF and raw cross-encoder scores
 
 ## Step 8 — Simpler graph and evidence-based answers
 
+**Local acceptance cases pass:** one bounded response plan reaches QA, deterministic routing selects document/table/web paths, stable evidence IDs and pinned corpus versions back citations, unknown citation IDs fail closed, possible numeric conflicts stay visible, and missing stores abstain safely. The unscoped legacy memory helper is retired. All 25 historical defect probes no longer reproduce; one rejection control passes. Semantic claim support and real-model quality remain evaluation work. See [Step 8 results](STEP8_RESULTS.md).
+
 **Covers:** A04–A05; unused planner output, legacy graph mismatch, source conflicts, unsupported answers.
 
 **Implement:** use one validated routing/planning decision, deterministic where possible. Retain a plan only if downstream nodes consume it. Send resolved queries to retrieval and validated plans to table tools. Label QA evidence with stable IDs, preserving web/local origin and explicit search mode.
@@ -234,4 +236,4 @@ The requested general assistant is a separate product scope beyond document QA. 
 - **C — Steps 6–8:** durable conversations, observable retrieval/reranking, evidence-based answers. Demonstrate an end-to-end follow-up.
 - **D — Steps 9–11:** optional episodic recall, measured operations, migration/scale decisions. Demonstrate release evidence.
 
-**Next implementation action: start Step 8 graph simplification and citation verification while measuring Step 3 parser resources and scanned-document OCR.** Step 6's first durable-conversation slice is in place, with its remaining gate items recorded above. Step 2 completes checkpoint A in code; Steps 4, 5, and 7 pass local cases. Checkpoint B remains open for Step 3 resource evidence. Production rollout has not occurred. Identity-provider deployment, workload targets, mobile layout, and storage-retention policies remain open. Passing checks do not establish production readiness.
+**Next implementation action: finish Step 3 parser/OCR evidence and Step 6 retention/multi-worker contracts, then start Step 9 opt-in episodic feedback.** Step 8 completes checkpoint C's local deterministic path, while durable graph checkpoints and shared-worker semantics remain open. Step 2 completes checkpoint A in code; Steps 4, 5, 7, and 8 pass local cases. Checkpoint B remains open for Step 3 resource evidence. Production rollout has not occurred. Identity-provider deployment, workload targets, mobile layout, and storage-retention policies remain open. Passing checks do not establish production readiness.

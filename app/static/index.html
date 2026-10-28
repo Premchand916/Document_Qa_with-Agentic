@@ -514,6 +514,12 @@ body{display:flex;flex-direction:column;position:relative;z-index:1}
             <template x-if="m.role==='assistant'&&m.retrieval?.reranker?.status==='fallback'">
               <div class="resp-meta" role="status">Reranker unavailable; sources shown in retrieval order.</div>
             </template>
+            <template x-if="m.role==='assistant'&&m.evidenceStatus?.status==='possible_conflict'">
+              <div class="resp-meta" role="status">Possible source conflict detected; compare cited evidence.</div>
+            </template>
+            <template x-if="m.role==='assistant'&&m.citations?.length">
+              <div class="resp-meta" x-text="'Citations: '+m.citations.map(c=>'['+c.evidence_id+']').join(' ')"></div>
+            </template>
             <template x-if="m.role==='assistant'&&m.stale">
               <div class="resp-meta">Answer cites a previous corpus version.</div>
             </template>
@@ -685,7 +691,8 @@ function nexus() {
         if(m.role==='user') { question=m.content; return {role:'user',content:m.content}; }
         const response=m.response||{};
         return {role:'assistant',content:m.content,q:question,cards:this.mkCards(response.documents||[]),
-                meta:response.response_plan||null,retrieval:response.retrieval_status||null,corpusVersion:response.corpus_version,
+                meta:response.response_plan||null,retrieval:response.retrieval_status||null,
+                citations:response.citations||[],evidenceStatus:response.evidence_status||null,corpusVersion:response.corpus_version,
                 stale:!!response.corpus_version&&!!this.corpusVersion&&response.corpus_version!==this.corpusVersion};
       });
       this.lastRes=null; this.srcKey=null;
@@ -789,6 +796,8 @@ function nexus() {
           cards: this.mkCards(d.documents||[]),
           meta: d.response_plan||null,
           retrieval: d.retrieval_status||null,
+          citations: d.citations||[],
+          evidenceStatus: d.evidence_status||null,
           corpusVersion:d.corpus_version,
         });
         try { await this.refreshConversations(); }
@@ -813,10 +822,10 @@ function nexus() {
         const words=txt.split(' ');
         const summ=words.slice(0,20).join(' ')+(words.length>20?'…':'');
         if(md.content_type==='web_result'){
-          out.push({title:md.title||md.source||'Web',summ,excerpt:txt,web:true,url:md.url||''});
+          out.push({title:md.title||md.source||'Web',summ,excerpt:txt,web:true,url:md.url||'',evidenceId:md.evidence_id||''});
         } else {
           const loc=md.page&&md.page!=='N/A'?` — ${md.page}`:'';
-          out.push({title:(md.source||'Unknown')+loc,summ,excerpt:txt,web:false,url:''});
+          out.push({title:(md.source||'Unknown')+loc,summ,excerpt:txt,web:false,url:'',evidenceId:md.evidence_id||''});
         }
       }
       return out;

@@ -50,7 +50,7 @@ class SimpleConversationMemory:
 
 
 def get_memory():
-    return SimpleConversationMemory(
-        memory_key="chat_history",
-        return_messages=True,
+    raise RuntimeError(
+        "Legacy process memory is retired. Use storage.conversations.ConversationRepository "
+        "with an authorized workspace and principal."
     )

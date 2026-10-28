@@ -273,6 +273,8 @@ def _run_chat_graph(req: ChatRequest, context: dict, history: list[dict], conver
         "sources": result.get("sources", []),
         "documents": [_doc_to_dict(d) for d in (result.get("documents") or [])],
         "retrieval_status": result.get("retrieval_status"),
+        "citations": result.get("citations", []),
+        "evidence_status": result.get("evidence_status"),
         "response_plan": result.get("response_plan", {}),
         "result_status": result.get("result_status"),
         "tool_result": result.get("tool_result"),

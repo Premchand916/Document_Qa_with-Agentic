@@ -20,7 +20,7 @@ From the repository root, with project dependencies installed:
 python3 -m tools.run_baseline
 ```
 
-This runs tests, diagnostics, and environment inspection in separate subprocesses. Fresh logs and JSON go to ignored `.baseline-results/`. A failed test, failed control, probe error, dependency inconsistency, or stage timeout produces a nonzero exit. Known reproduced failures stay visible in the diagnostic report.
+This runs tests, diagnostics, and environment inspection in separate subprocesses. Fresh logs and JSON go to ignored `.baseline-results/`. Since Step 8 repaired all registered probes, any reproduced defect, failed control, probe error, dependency inconsistency, or stage timeout now produces a nonzero exit. Historical Step 0 results above remain the dated baseline.
 
 Focused checks:
 

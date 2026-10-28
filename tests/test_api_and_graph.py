@@ -45,6 +45,8 @@ class ApiAndGraphTests(OfflineCase):
         self.assertIn("30 days", response.json()["response"])
         self.assertEqual(response.json()["documents"][0]["metadata"]["source"], "policy.txt")
         self.assertEqual(response.json()["retrieval_status"]["reranker"]["status"], "fallback")
+        self.assertEqual(len(response.json()["citations"]), 1)
+        self.assertEqual(response.json()["citations"][0]["corpus_version"], response.json()["corpus_version"])
 
     def test_upload_to_table_total_with_real_graph(self):
         from langgraph_flow.graph_builder import build_graph

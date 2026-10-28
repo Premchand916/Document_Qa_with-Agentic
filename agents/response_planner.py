@@ -106,6 +106,11 @@ def _parse_line_value(text, label):
     return match.group(1).strip()
 
 
+def _clean_plan_text(value, fallback, limit=240):
+    value = re.sub(r"[\x00-\x1f]+", " ", str(value or "")).strip()
+    return value[:limit] or fallback
+
+
 def plan_response_strategy(state):
     query = state["query"]
     prompt_query = state.get("prompt_query", query)
@@ -164,18 +169,18 @@ retrieval_focus: <short phrase>
     if not planned_mode or planned_mode == "Auto":
         planned_mode = answer_mode if answer_mode != "Auto" else "Concise evidence-based answer"
 
-    sections = [section.strip() for section in sections_text.split("|") if section.strip()]
+    sections = [_clean_plan_text(section, "", 80) for section in sections_text.split("|") if section.strip()]
     if not sections:
         sections = _default_sections(intent, answer_mode)
 
     state["intent"] = intent
     state["response_plan"] = {
         "intent": intent,
-        "user_need": user_need or "Answer the user's question using the uploaded evidence.",
-        "answer_mode": planned_mode,
-        "output_format": output_format or planned_mode,
+        "user_need": _clean_plan_text(user_need, "Answer the user's question using the uploaded evidence."),
+        "answer_mode": _clean_plan_text(planned_mode, "Concise evidence-based answer", 80),
+        "output_format": _clean_plan_text(output_format, planned_mode, 80),
         "sections": sections[:5],
-        "retrieval_focus": retrieval_focus or "Use the strongest evidence from the retrieved documents.",
+        "retrieval_focus": _clean_plan_text(retrieval_focus, "Use the strongest evidence from the retrieved documents."),
         "audience_guidance": AUDIOENCE_GUIDANCE.get(audience, AUDIOENCE_GUIDANCE["General"]),
         "depth_guidance": DEPTH_GUIDANCE.get(response_depth, DEPTH_GUIDANCE["Balanced"]),
         "mode_guidance": ANSWER_MODE_GUIDANCE.get(answer_mode, ANSWER_MODE_GUIDANCE["Auto"]),

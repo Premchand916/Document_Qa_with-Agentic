@@ -68,6 +68,8 @@ class RetrievalTests(OfflineCase):
         absent = retriever_agent({"query": "xylophone warranty", "vectorstore": vs})
         self.assertEqual(absent["documents"], [])
         self.assertEqual(absent["retrieval_status"]["lexical_hits"], 0)
+        self.assertEqual(absent["retrieval_status"]["retrieval_attempts"], 1)
+        self.assertEqual(absent["retrieval_status"]["max_retrieval_attempts"], 1)
         with patch("agents.retriever_agent.rerank_with_status") as rerank:
             from retrieval.reranker import RerankResult
             rerank.side_effect = lambda query, found, top_k: RerankResult(found[:top_k], None, None, "fallback")

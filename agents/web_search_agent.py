@@ -18,6 +18,7 @@ def web_search_agent(state):
         state["documents"] = []
         state["response"] = "No query provided for web search."
         state["source"] = "Web"
+        state["result_status"] = "insufficient_evidence"
         return state
 
     api_key = os.getenv("TAVILY_API_KEY", "").strip()
@@ -28,6 +29,7 @@ def web_search_agent(state):
             "Add it to your `.env` file to use live web search."
         )
         state["source"] = "Web"
+        state["result_status"] = "tool_error"
         return state
 
     try:
@@ -44,6 +46,7 @@ def web_search_agent(state):
         state["documents"] = []
         state["response"] = _build_search_error(str(exc))
         state["source"] = "Web"
+        state["result_status"] = "tool_error"
         return state
 
     documents = []
@@ -92,6 +95,7 @@ def web_search_agent(state):
             "Try rephrasing your question or using more specific keywords."
         )
         state["source"] = "Web"
+        state["result_status"] = "insufficient_evidence"
         return state
 
     state["documents"] = documents
