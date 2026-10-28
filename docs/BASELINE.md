@@ -56,26 +56,73 @@ Labels live in `tests/fixtures/evaluation.json`; corpus files live in `tests/fix
 
 Real-model execution is a separate opt-in activity and has not been performed. For each case, upload only its listed sources, start a fresh conversation, replay its history, ask the question, and capture actual answer/evidence. Record provider/model/revision, embedding configuration, corpus version, latency, and token/cost data where available alongside the predictions. Do not use golden labels to generate answers. This step provides an offline scorer, not an automatic live-provider adapter.
 
-Normalize actual results into a JSON list, one entry per case:
+Legacy prediction lists remain accepted for development diagnostics. Release evaluation uses a run envelope so model/revision, embedding identity, split, timestamp, and fixture hash cannot be omitted:
 
 ```json
-[
-  {
-    "id": "Q01",
-    "answer": "The return deadline is 30 days from delivery.",
-    "evidence_sources": ["policy.pdf"],
-    "abstained": false
-  }
-]
+{
+  "run": {
+    "provider": "ollama",
+    "model": "model-name",
+    "model_revision": "sha256:model-digest",
+    "embedding_identity": "model:revision:dimension",
+    "generated_at_utc": "2026-10-28T00:00:00Z",
+    "split": "holdout",
+    "corpus_fixture_sha256": "fixture-bundle-digest"
+  },
+  "predictions": [
+    {
+      "id": "H01",
+      "answer": "Observed answer text",
+      "evidence_sources": ["ranked-source-1", "ranked-source-2"],
+      "cited_sources": ["source-used-in-answer"],
+      "abstained": false,
+      "tool_result": null,
+      "latency_ms": 1250,
+      "token_usage": {"input": 500, "output": 80},
+      "cost_usd": 0,
+      "manual_review": {"semantic_correct": true, "citations_supported": true}
+    }
+  ]
+}
 ```
 
-This is a format example, not a measured prediction. If the current API lacks an abstention field, annotate it from the actual response and document that manual annotation. Score a complete prediction file explicitly:
+This is a schema example, not measured output. Current `tests/fixtures/evaluation.json` is explicitly `development`; it cannot produce `release_eligible: true`. Freeze a separate holdout label file before running a candidate. If fields require manual annotation, record that process with the run. Score explicitly:
 
 ```bash
 python3 -m tools.evaluate_baseline --predictions /path/to/predictions.json --output .baseline-results/model-evaluation.json
+python3 -m tools.evaluate_baseline --labels /path/to/holdout-labels.json --predictions /path/to/run.json \
+  --output .baseline-results/holdout-evaluation.json --require-release-eligible
 ```
 
-The scorer rejects duplicate/unknown IDs, reports missing-case coverage, and counts omitted cases against aggregate scores. It measures source-level evidence recall and literal answer contracts, not semantic correctness. A matching number can still appear in an incorrect answer; apply every manual rubric. Unknown evidence sources are listed for review. Full coverage yields exit zero regardless of quality; quality gates require the metrics and manual review, not just the process exit code.
+The scorer reports ordered evidence Recall@1/3/5, MRR, source citation precision/recall, literal answer contracts, abstention accuracy, unanswerable evidence cleanliness, exact typed table results, p50/p95 latency, tokens, cost, and independent manual review. Missing cases count against coverage. Release eligibility requires a holdout split, rich run contract, full review, and every declared target passing.
+
+## Migration, index, and combined release gates
+
+Rollback rehearsal uses SQLite backup plus immutable corpus copies. It activates the previous version, reconstructs the repository, restores the current version, reconstructs again, and verifies the source fingerprint never changed:
+
+```bash
+python3 -m tools.rehearse_migration --data-dir /path/to/vector_db --workspace workspace-id \
+  --copy-dir /path/to/empty-rehearsal-copy --output .baseline-results/migration.json
+```
+
+FAISS benchmarking runs outside the application process. Flat remains the exact reference; HNSW is measured against exact neighbors. Output records Recall@k, build/search time, serialized bytes, RSS, and a non-mutating recommendation:
+
+```bash
+python3 -m tools.benchmark_faiss_indexes --output .baseline-results/index-benchmark.json
+```
+
+Combine evidence only after a held-out model run exists:
+
+```bash
+python3 -m tools.verify_release_evidence \
+  --baseline .baseline-results/summary.json \
+  --evaluation .baseline-results/holdout-evaluation.json \
+  --migration .baseline-results/migration.json \
+  --index-benchmark .baseline-results/index-benchmark.json \
+  --output .baseline-results/release-evidence.json
+```
+
+Nonzero exit means release evidence remains incomplete; it does not authorize deployment.
 
 ## Workload and acceptance targets
 

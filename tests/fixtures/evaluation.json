@@ -1,6 +1,23 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
+  "split": "development",
   "scope": "Synthetic development set, not held-out production evaluation. Source-level evidence labels.",
+  "release_targets": {
+    "minimum": {
+      "coverage": 1.0,
+      "answer_contract_rate": 1.0,
+      "mean_evidence_recall_at_5": 1.0,
+      "mean_reciprocal_rank": 0.9,
+      "abstention_accuracy": 1.0,
+      "table_exact_accuracy": 1.0,
+      "source_citation_precision": 1.0,
+      "source_citation_recall": 1.0,
+      "unanswerable_evidence_clean_rate": 1.0,
+      "manual_semantic_accuracy": 1.0,
+      "manual_citation_support_rate": 1.0
+    },
+    "maximum": {"latency_ms_p95": 10000}
+  },
   "sources": {
     "policy.pdf": {"path": "corpus/policy.txt", "format": "generated_pdf", "locator": "page 1"},
     "policy.txt": {"path": "corpus/policy.txt", "format": "text", "locator": "line 1"},
@@ -14,10 +31,10 @@
   },
   "cases": [
     {"id": "Q01", "category": "pdf_qa", "sources": ["policy.pdf"], "query": "What is the alpha return deadline?", "history": [], "expected": {"evidence_sources": ["policy.pdf"], "abstained": false, "required_fragments": ["30"], "forbidden_fragments": []}, "rubric": "Answer 30 days from delivery and cite page 1."},
-    {"id": "Q02", "category": "csv_calculation", "sources": ["sales.csv"], "query": "Total amount", "history": [], "expected": {"evidence_sources": ["sales.csv"], "abstained": false, "required_fragments": ["30"], "forbidden_fragments": []}, "rubric": "Sum both rows: 10 + 20 = 30; cite rows 1-2."},
-    {"id": "Q03", "category": "filtered_calculation", "sources": ["sales.csv"], "query": "Total amount for North only", "history": [], "expected": {"evidence_sources": ["sales.csv"], "abstained": false, "required_fragments": ["10"], "forbidden_fragments": []}, "rubric": "Apply region == North; result 10, not total 30."},
-    {"id": "Q04", "category": "table_selection", "sources": ["sales.csv", "second.csv"], "query": "Total amount in second.csv", "history": [], "expected": {"evidence_sources": ["second.csv"], "abstained": false, "required_fragments": ["99"], "forbidden_fragments": []}, "rubric": "Select second.csv, compute 99, cite its row."},
-    {"id": "Q05", "category": "nullable_calculation", "sources": ["missing.csv"], "query": "Total amount, excluding missing values", "history": [], "expected": {"evidence_sources": ["missing.csv"], "abstained": false, "required_fragments": ["40"], "forbidden_fragments": []}, "rubric": "10 + 30 = 40; disclose one missing value."},
+    {"id": "Q02", "category": "csv_calculation", "sources": ["sales.csv"], "query": "Total amount", "history": [], "expected": {"evidence_sources": ["sales.csv"], "abstained": false, "required_fragments": ["30"], "forbidden_fragments": [], "tool_result": {"operation": "sum", "value": 30}}, "rubric": "Sum both rows: 10 + 20 = 30; cite rows 1-2."},
+    {"id": "Q03", "category": "filtered_calculation", "sources": ["sales.csv"], "query": "Total amount for North only", "history": [], "expected": {"evidence_sources": ["sales.csv"], "abstained": false, "required_fragments": ["10"], "forbidden_fragments": [], "tool_result": {"operation": "sum", "value": 10}}, "rubric": "Apply region == North; result 10, not total 30."},
+    {"id": "Q04", "category": "table_selection", "sources": ["sales.csv", "second.csv"], "query": "Total amount in second.csv", "history": [], "expected": {"evidence_sources": ["second.csv"], "abstained": false, "required_fragments": ["99"], "forbidden_fragments": [], "tool_result": {"operation": "sum", "value": 99, "source": "second.csv"}}, "rubric": "Select second.csv, compute 99, cite its row."},
+    {"id": "Q05", "category": "nullable_calculation", "sources": ["missing.csv"], "query": "Total amount, excluding missing values", "history": [], "expected": {"evidence_sources": ["missing.csv"], "abstained": false, "required_fragments": ["40"], "forbidden_fragments": [], "tool_result": {"operation": "sum", "value": 40}}, "rubric": "10 + 30 = 40; disclose one missing value."},
     {"id": "Q06", "category": "follow_up", "sources": ["policy.txt"], "query": "What is its deadline?", "history": [{"role": "user", "content": "Tell me about the alpha return policy."}, {"role": "assistant", "content": "We are discussing the alpha return policy."}], "expected": {"evidence_sources": ["policy.txt"], "abstained": false, "required_fragments": ["30"], "forbidden_fragments": []}, "rubric": "Resolve 'its' to alpha returns before retrieval; answer 30 days from delivery."},
     {"id": "Q07", "category": "unanswerable", "sources": ["policy.txt"], "query": "What is the alpha CEO's birthday?", "history": [], "expected": {"evidence_sources": [], "abstained": true, "required_fragments": [], "forbidden_fragments": []}, "rubric": "Say the uploaded policy does not contain a birthday; invent no date."},
     {"id": "Q08", "category": "duplicate_provenance", "sources": ["policy.txt", "policy_copy.txt"], "query": "Do both uploaded policies agree on the return deadline? Cite both.", "history": [], "expected": {"evidence_sources": ["policy.txt", "policy_copy.txt"], "abstained": false, "required_fragments": ["30"], "forbidden_fragments": []}, "rubric": "Both say 30 days; preserve both source references."},

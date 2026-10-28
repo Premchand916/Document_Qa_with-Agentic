@@ -127,6 +127,13 @@ class WorkspaceRepository:
             connection.execute("UPDATE workspaces SET provider=? WHERE workspace_id=?", (provider, workspace))
             connection.commit()
 
+    def list_versions(self, workspace: str) -> list[dict]:
+        state = self.state(workspace)
+        with self._connect() as connection:
+            rows = connection.execute("""SELECT version,manifest_hash,created_at FROM versions
+                WHERE workspace_id=? ORDER BY created_at DESC,rowid DESC""", (workspace,)).fetchall()
+        return [{**dict(row), "active": row["version"] == state["active_version"]} for row in rows]
+
     def _version_path(self, workspace, version):
         if not re.fullmatch(r"[a-f0-9]{32}", version):
             raise CorpusIntegrityError("Invalid version")

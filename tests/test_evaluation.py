@@ -58,3 +58,74 @@ class EvaluationTests(unittest.TestCase):
         row = next(row for row in report["cases"] if row["id"] == "Q11")
         self.assertFalse(row["answer_contract_passed"])
 
+    def test_abstention_with_hallucinated_evidence_is_not_clean(self):
+        report = score_predictions(self.labels, [{"id": "Q07", "answer": "Not available",
+            "evidence_sources": ["policy.txt"], "cited_sources": ["policy.txt"], "abstained": True}])
+        row = next(row for row in report["cases"] if row["id"] == "Q07")
+        self.assertTrue(row["answer_contract_passed"])
+        self.assertFalse(row["unanswerable_evidence_clean"])
+
+    def test_rank_citation_and_table_metrics_are_independent(self):
+        predictions = [
+            {"id": "Q08", "answer": "Both say 30 days", "evidence_sources": ["noise.txt", "policy.txt", "policy_copy.txt"],
+             "cited_sources": ["policy.txt", "noise.txt"], "abstained": False},
+            {"id": "Q02", "answer": "30", "evidence_sources": ["sales.csv"], "cited_sources": ["sales.csv"],
+             "abstained": False, "tool_result": {"operation": "sum", "value": 31}},
+        ]
+        report = score_predictions(self.labels, predictions)
+        duplicate = next(row for row in report["cases"] if row["id"] == "Q08")
+        table = next(row for row in report["cases"] if row["id"] == "Q02")
+        self.assertEqual(duplicate["evidence_recall_at_k"]["1"], 0)
+        self.assertEqual(duplicate["evidence_recall_at_k"]["3"], 1)
+        self.assertEqual(duplicate["reciprocal_rank"], 0.5)
+        self.assertEqual(duplicate["source_citation_precision"], 0.5)
+        self.assertEqual(duplicate["source_citation_recall"], 0.5)
+        self.assertFalse(table["table_exact"])
+        predictions[1]["tool_result"]["value"] = 30.0
+        typed = score_predictions(self.labels, predictions)
+        self.assertFalse(next(row for row in typed["cases"] if row["id"] == "Q02")["table_exact"])
+
+    def test_release_requires_holdout_rich_contract_manual_review_and_targets(self):
+        labels = {
+            "schema_version": 2,
+            "split": "holdout",
+            "release_targets": {
+                "minimum": {"coverage": 1, "answer_contract_rate": 1, "mean_evidence_recall_at_5": 1,
+                            "mean_reciprocal_rank": 1, "abstention_accuracy": 1,
+                            "source_citation_precision": 1, "source_citation_recall": 1,
+                            "manual_semantic_accuracy": 1, "manual_citation_support_rate": 1},
+                "maximum": {"latency_ms_p95": 100},
+            },
+            "cases": [{"id": "H01", "sources": ["a.txt"], "expected": {
+                "evidence_sources": ["a.txt"], "abstained": False,
+                "required_fragments": ["alpha"], "forbidden_fragments": []}}],
+        }
+        envelope = {"run": {
+            "provider": "ollama", "model": "test", "model_revision": "sha256:test",
+            "embedding_identity": "test:2", "generated_at_utc": "2026-10-28T00:00:00Z",
+            "split": "holdout", "corpus_fixture_sha256": "abc",
+        }, "predictions": [{
+            "id": "H01", "answer": "alpha", "evidence_sources": ["a.txt"],
+            "cited_sources": ["a.txt"], "abstained": False, "tool_result": None,
+            "latency_ms": 10, "token_usage": {"input": 5, "output": 2}, "cost_usd": 0,
+            "manual_review": {"semantic_correct": True, "citations_supported": True},
+        }]}
+        report = score_predictions(labels, envelope)
+        self.assertTrue(report["quality_gate_passed"])
+        self.assertTrue(report["release_eligible"])
+        self.assertEqual(report["latency_ms_p95"], 10)
+        self.assertEqual(report["token_usage"], {"input": 5, "output": 2})
+        self.assertFalse(score_predictions({**labels, "split": "development"},
+                         {**envelope, "run": {**envelope["run"], "split": "development"}})["release_eligible"])
+
+    def test_rich_run_rejects_missing_metadata_and_split_mismatch(self):
+        with self.assertRaisesRegex(ValueError, "metadata missing"):
+            score_predictions(self.labels, {"run": {}, "predictions": []})
+        run = {field: "value" for field in (
+            "provider", "model", "model_revision", "embedding_identity",
+            "generated_at_utc", "split", "corpus_fixture_sha256",
+        )}
+        run["split"] = "holdout"
+        with self.assertRaisesRegex(ValueError, "split"):
+            score_predictions(self.labels, {"run": run, "predictions": []})
+

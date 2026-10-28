@@ -136,3 +136,44 @@ Use this record for foundation changes: understand requirements, state invariant
 - Cached embedding measurement passed for 256 documents at 384 dimensions in 2.543 seconds with 595.125 MiB peak process RSS. This is a local synthetic measurement, not a production SLO.
 - Live browser check passed HTTP 202 upload acceptance, durable status polling, final source display, suggested question display, and ready-state transition.
 - Remaining boundaries: shared-local SQLite only, polling/startup recovery instead of a dedicated worker scheduler, cooperative native-call cancellation, and unmeasured production/model/browser load.
+
+## Active work — Step 11 evaluation, migration, and index decisions
+
+### Requirements
+
+- Keep development labels separate from held-out release evidence. Never claim model quality from deterministic tests or visible tuning fixtures.
+- Score ordered evidence Recall@k and MRR, source-level citation precision/recall, literal answer contracts, abstention, exact table outputs, latency, tokens, cost, and optional manual semantic review.
+- Reject incomplete, duplicate, unknown, malformed, or split-mismatched prediction runs. Release eligibility requires an explicitly held-out label set, full coverage, declared model/run metadata, and passing targets.
+- Rehearse corpus migration and rollback only on a copy. Verify both previous and current versions after process-style repository reconstruction; never mutate the source data directory.
+- Keep exact Flat search as reference. Benchmark HNSW against exact neighbors using deterministic vectors and report build/search time, serialized size, and Recall@k.
+- Do not change the production index from Flat unless exact search misses a declared latency target and ANN meets declared recall plus improvement targets.
+
+### Design
+
+- Extend the offline evaluation tool while preserving legacy prediction-list input for development scoring. Add a versioned run-envelope for release evaluation.
+- Add reusable release targets to label files; current synthetic fixture remains `development` and therefore cannot become release eligible.
+- Add a workspace version-list API and a copy-only migration rehearsal utility using SQLite backup plus immutable corpus copies.
+- Add an offline FAISS benchmark with fixed seed, bounded vector/query counts, exact Flat baseline, and HNSW parameter reporting. Benchmark output recommends; it does not mutate runtime configuration.
+
+### Acceptance cases
+
+- Ranking metrics change correctly when relevant sources move down or disappear.
+- Citation hallucinations reduce source precision; missing expected citations reduce source recall.
+- Table value/type mismatch fails exact table accuracy; correct abstention is scored separately from answer fragments.
+- Missing run metadata or development labels make release eligibility false even when answers pass.
+- Rollback rehearsal loads old data, restores current data, survives repository reconstruction, and leaves source state/checksums unchanged.
+- Flat returns exact reference neighbors; HNSW Recall@k is measured against them; recommendation remains Flat when exact latency target passes.
+
+### Explicit non-goals
+
+- Claiming held-out real-model quality before a separately collected evaluation run exists.
+- Switching production storage to HNSW, IVF, PQ, LSH, or another backend from synthetic microbenchmarks alone.
+- Online migration while writers are active or cross-host rollback orchestration.
+
+### Result — 28 October 2026
+
+- Implemented versioned evaluation/run contracts, ranked retrieval and citation metrics, typed table scoring, abstention cleanliness, latency/token/cost accounting, manual-review gates, and combined release-evidence verification.
+- Implemented copy-only SQLite/artifact migration rehearsal with rollback, restoration, repository reconstruction, and source immutability checks.
+- Added isolated Flat/HNSW benchmark to the full baseline. At 5,000×64D vectors, exact Flat p95 was 0.0203 ms; HNSW p95 was 0.0395 ms with Recall@10 0.981 and 2.06× serialized size. Decision: retain Flat.
+- Full baseline passed: 169 tests; zero reproduced defects; 25 defects not reproduced; one rejection control passed; zero probe errors; ingestion, OCR, embeddings, index benchmark, and environment stages passed.
+- Release/fine-tuning gate remains blocked by design: current labels are development data and no separately frozen held-out real-model run plus independent review exists.
