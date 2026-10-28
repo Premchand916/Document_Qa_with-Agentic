@@ -66,12 +66,12 @@ class IsolatedIngestionTests(OfflineCase):
         self.assertEqual(isolated._worker_rss_limit(isolated.MAX_WORKER_RSS),
                          isolated.MAX_WORKER_RSS)
 
-    def test_api_runs_at_most_two_parser_jobs_concurrently(self):
+    def test_api_runs_at_most_two_ingestion_jobs_concurrently(self):
         active = 0
         peak = 0
         lock = threading.Lock()
 
-        def parse(name, content):
+        def process(*args):
             nonlocal active, peak
             with lock:
                 active += 1
@@ -79,15 +79,25 @@ class IsolatedIngestionTests(OfflineCase):
             time.sleep(0.05)
             with lock:
                 active -= 1
-            return name
+            return {"ready": True}
+
+        class Repository:
+            lease_seconds = 120
+
+            def claim(self, job_id):
+                return f"token-{job_id}"
+
+            def complete(self, *args):
+                pass
 
         async def exercise():
-            adapters = [self.server._FileAdapter(f"{index}.txt", b"alpha") for index in range(4)]
-            with patch.object(self.server, "_PARSE_SLOTS", asyncio.Semaphore(2)), \
-                    patch.object(self.server, "parse_in_isolated_process", side_effect=parse):
-                return await asyncio.gather(*(self.server._parse_adapter(adapter) for adapter in adapters))
+            repository = Repository()
+            with patch.object(self.server, "_INGESTION_SLOTS", asyncio.Semaphore(2)), \
+                    patch.object(self.server, "get_ingestion_repository", return_value=repository), \
+                    patch.object(self.server, "_process_ingestion_job", side_effect=process):
+                await asyncio.gather(*(self.server._run_ingestion_job(str(index)) for index in range(4)))
 
-        self.assertEqual(asyncio.run(exercise()), ["0.txt", "1.txt", "2.txt", "3.txt"])
+        asyncio.run(exercise())
         self.assertEqual(peak, 2)
 
     def test_api_timeout_preserves_previous_corpus(self):

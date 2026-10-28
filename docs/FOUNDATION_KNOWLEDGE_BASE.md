@@ -91,3 +91,48 @@ Use this record for foundation changes: understand requirements, state invariant
 - Full baseline passed: 148 tests; zero reproduced defects; 25 defects not reproduced; one rejection control passed; zero probe errors; ingestion, embedding, and environment stages passed.
 - Live synthetic browser check passed correction entry, unverified status messaging, and successful `POST /api/episodes` persistence.
 - Remaining boundaries: no trusted reviewer UI or audit role, conservative exact-task/corpus recall, startup-triggered cleanup, and no evaluated semantic episode index.
+
+## Active work — Step 10 durable ingestion jobs
+
+### Requirements
+
+- Preserve the existing synchronous `/api/upload` success response while backing it with a durable job record.
+- Derive workspace and principal from the trusted request boundary; never accept ownership in multipart fields.
+- Persist bounded input bytes before work starts. One idempotency key plus one payload fingerprint identifies one job; conflicting reuse fails closed.
+- Run parse, chunk, embedding/index construction, question generation, and publication outside the event loop under bounded admission.
+- Use opaque expiring leases so multiple local workers cannot process one job concurrently. Restart requeues only expired work.
+- Keep the previous corpus active until the new version is fully written, verified, and atomically published.
+- Expose owner-scoped job status, safe error codes, queue/run duration, stage timings, and cooperative cancellation.
+- Client disconnect must not release capacity while blocking native work continues.
+
+### Design
+
+- Add a SQLite ingestion-job repository beside workspace storage. Store bounded input BLOBs, state, lease, expected corpus version, result/error, and timing metadata.
+- Use states `queued`, `running`, `cancel_requested`, `ready`, `failed`, and `cancelled`.
+- Keep a bounded in-process task registry and semaphore. SQLite leases provide shared-local-worker exclusion; PostgreSQL or another shared database remains required for multi-host execution.
+- Check cancellation between durable stages. Parser hard deadlines remain process-enforced; native embedding/model calls are not forcibly interrupted.
+- Retain jobs for seven days by default, configurable within bounded limits; startup purges expired terminal jobs and recovers expired leases.
+
+### Acceptance cases
+
+- Duplicate identical submission returns one job/result; conflicting idempotency reuse returns 409.
+- Slow ingestion does not stall lightweight API requests.
+- Expired running work is recovered after restart; live work is not stolen.
+- Cancellation before publication preserves the previous corpus.
+- Failure stores a safe code and never reports success or exposes internal exception text.
+- Cross-workspace/principal job reads and cancellation fail closed.
+- Stage and queue timing are visible without exposing document contents.
+
+### Explicit non-goals
+
+- Hard cancellation of an active native embedding or model call.
+- Multi-host scheduling, distributed queues, and globally fair admission.
+- Browser heap and production p95 claims from synthetic local tests.
+
+### Result — 28 October 2026
+
+- Implemented durable owner-scoped upload jobs, input persistence, bounded admission, expiring leases, restart/poll recovery, replay-safe publication, stage metrics, safe failures, async UI polling, and cooperative cancellation.
+- Full baseline passed: 159 tests; zero reproduced defects; 25 defects not reproduced; one rejection control passed; zero probe errors; ingestion, OCR, embedding, and environment stages passed.
+- Cached embedding measurement passed for 256 documents at 384 dimensions in 2.543 seconds with 595.125 MiB peak process RSS. This is a local synthetic measurement, not a production SLO.
+- Live browser check passed HTTP 202 upload acceptance, durable status polling, final source display, suggested question display, and ready-state transition.
+- Remaining boundaries: shared-local SQLite only, polling/startup recovery instead of a dedicated worker scheduler, cooperative native-call cancellation, and unmeasured production/model/browser load.

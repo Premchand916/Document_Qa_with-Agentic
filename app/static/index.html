@@ -100,6 +100,8 @@ body{display:flex;flex-direction:column;position:relative;z-index:1}
 
 /* ── Indexing spinner ────────────────────────────────────────────────── */
 .indexing{display:flex;align-items:center;gap:10px;padding:8px 16px;color:var(--cyan);font-size:12.5px}
+.cancel-job{margin-left:auto;border:1px solid rgba(255,91,110,.35);border-radius:6px;background:transparent;color:var(--red);padding:4px 7px;font:inherit;cursor:pointer}
+.cancel-job:hover{background:rgba(255,91,110,.1)}
 @keyframes spin{to{transform:rotate(360deg)}}
 .spin{width:15px;height:15px;border:2px solid rgba(0,212,255,.2);border-top-color:var(--cyan);border-radius:50%;animation:spin .75s linear infinite;flex-shrink:0}
 
@@ -391,7 +393,8 @@ body{display:flex;flex-direction:column;position:relative;z-index:1}
     <!-- Indexing -->
     <div class="indexing" x-show="indexing">
       <div class="spin"></div>
-      <span>Indexing documents…</span>
+      <span x-text="ingestionStage"></span>
+      <button type="button" class="cancel-job" x-show="ingestionJob" @click="cancelIngestion()">Cancel</button>
     </div>
 
     <div class="div"></div>
@@ -658,7 +661,7 @@ function nexus() {
   return {
     // ── State ─────────────────────────────────────────────────────────────
     workspaceId: "", workspaces: [], canSelectWorkspace: false, switching: true, providerChanging: false,
-    files: [], dragging: false, indexing: false, uploadWarnings: [],
+    files: [], dragging: false, indexing: false, uploadWarnings: [], ingestionJob: null, ingestionStage: 'Indexing documents…',
     chatHistory: [], conversations: [], conversationId: '', conversationNextBefore: null, pendingSubmission: null, corpusVersion: null, txt: '', loading: false,
     srcKey: null,
     notes: [], lastRes: null, feedbackStatus: '',
@@ -709,6 +712,11 @@ function nexus() {
       this.uploadWarnings = s.warnings || [];
       this.corpusVersion = s.corpus_version || null;
       await this.refreshConversations(true);
+      const jobsResponse = await this.apiFetch('/api/ingestion-jobs?limit=10');
+      if(jobsResponse.ok) {
+        const active=((await jobsResponse.json()).jobs||[]).find(job=>['queued','running','cancel_requested'].includes(job.status));
+        if(active && !this.indexing) this.resumeIngestion(active.job_id);
+      }
       if (s.legacy_index_detected) this.err='An older index was found. Re-upload the original files to use this workspace.';
     },
     async refreshConversations(openLatest=false) {
@@ -788,6 +796,38 @@ function nexus() {
     onDrop(e) { this.dragging=false; if(e.dataTransfer.files.length) this.upload(e.dataTransfer.files); },
     onFileInput(e) { if(e.target.files.length) this.upload(e.target.files); },
 
+    jobStage(job) {
+      const stage=(job.current_stage||'queued').replaceAll('_',' ');
+      return job.status==='cancel_requested' ? 'Cancellation requested…' : `Indexing: ${stage}…`;
+    },
+    async waitForIngestion(jobId) {
+      while(true) {
+        const r=await this.apiFetch('/api/ingestion-jobs/'+encodeURIComponent(jobId));
+        if(!r.ok) throw new Error(await this.apiError(r,'Could not read ingestion status'));
+        const job=await r.json();
+        this.ingestionJob=job; this.ingestionStage=this.jobStage(job);
+        if(job.status==='ready') return job.result;
+        if(job.status==='failed') throw new Error(job.error?.message||'Ingestion failed');
+        if(job.status==='cancelled') throw new Error('Ingestion cancelled before publication.');
+        await new Promise(resolve=>setTimeout(resolve,250));
+      }
+    },
+    async resumeIngestion(jobId) {
+      this.indexing=true; this.ingestionJob={job_id:jobId}; this.ingestionStage='Resuming ingestion…';
+      try {
+        await this.waitForIngestion(jobId);
+        this.ingestionJob=null; this.indexing=false;
+        await this.loadWorkspace();
+      } catch(e) { this.err=e.message; this.indexing=false; this.ingestionJob=null; }
+    },
+    async cancelIngestion() {
+      const jobId=this.ingestionJob?.job_id;
+      if(!jobId) return;
+      const r=await this.apiFetch('/api/ingestion-jobs/'+encodeURIComponent(jobId),{method:'DELETE'});
+      if(!r.ok) this.err=await this.apiError(r,'Could not cancel ingestion');
+      else { this.ingestionJob=await r.json(); this.ingestionStage=this.jobStage(this.ingestionJob); }
+    },
+
     async upload(fileList) {
       if (this.busy) return;
       this.indexing=true; this.err=null; this.uploadWarnings=[];
@@ -798,9 +838,14 @@ function nexus() {
         infos.push({name:f.name, ext:f.name.split('.').pop().toLowerCase()});
       }
       try {
-        const r = await this.apiFetch('/api/upload',{method:'POST',body:fd});
+        const key=globalThis.crypto?.randomUUID?.()||`${Date.now()}-${Math.random().toString(16).slice(2)}`;
+        const r = await this.apiFetch('/api/upload',{method:'POST',body:fd,
+          headers:{'Prefer':'respond-async','Idempotency-Key':key}});
         if(!r.ok) throw new Error(await this.apiError(r, 'Upload failed'));
-        const d = await r.json();
+        const accepted=await r.json();
+        this.ingestionJob=accepted.job;
+        this.ingestionStage=this.jobStage(accepted.job);
+        const d = await this.waitForIngestion(accepted.job.job_id);
         this.files = infos;
         this.questions = d.questions||[];
         this.uploadWarnings = d.warnings||[];
@@ -809,7 +854,7 @@ function nexus() {
         for(const m of this.chatHistory) if(m.role==='assistant'&&m.corpusVersion&&m.corpusVersion!==this.corpusVersion) m.stale=true;
         this.lastRes=null; this.feedbackStatus=''; this.srcKey=null;
       } catch(e){ this.err=e.message; }
-      finally{ this.indexing=false; }
+      finally{ this.indexing=false; this.ingestionJob=null; this.ingestionStage='Indexing documents…'; }
     },
 
     // ── Chat ──────────────────────────────────────────────────────────────

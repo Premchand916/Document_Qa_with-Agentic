@@ -136,6 +136,13 @@ class WorkspaceRepository:
         with self._connect() as connection:
             connection.execute("BEGIN IMMEDIATE")
             current = connection.execute("SELECT active_version FROM workspaces WHERE workspace_id=?", (workspace,)).fetchone()[0]
+            if current == version:
+                existing = connection.execute("""SELECT manifest_hash FROM versions
+                    WHERE workspace_id=? AND version=?""", (workspace, version)).fetchone()
+                if existing is None or existing["manifest_hash"] != manifest_hash:
+                    raise CorpusIntegrityError("Published version metadata differs")
+                connection.commit()
+                return
             if current != expected_version:
                 raise PublicationConflict("Corpus changed during upload; retry against current version")
             connection.execute("INSERT INTO versions(workspace_id,version,manifest_hash) VALUES (?,?,?)", (workspace, version, manifest_hash))
@@ -144,13 +151,24 @@ class WorkspaceRepository:
 
     def publish(self, workspace: str, vectorstore, tabular_assets: list,
                 questions: list, file_types: list, sources: list, *, expected_version: str | None,
-                warnings: list | None = None, extraction_reports: list | None = None) -> str:
+                warnings: list | None = None, extraction_reports: list | None = None,
+                version: str | None = None) -> str:
         import faiss
         if type(vectorstore.index).__name__ != "IndexFlatL2" or vectorstore.index.metric_type != faiss.METRIC_L2:
             raise CorpusIntegrityError("Unsupported vector index metric")
         self.state(workspace)
-        version = uuid4().hex
+        version = version or uuid4().hex
         folder = self._version_path(workspace, version)
+        if folder.exists():
+            manifest_path = folder / "manifest.json"
+            if manifest_path.is_file():
+                manifest_hash = digest(manifest_path)
+                self._load({"workspace_id": workspace, "provider": self.default_provider,
+                            "active_version": version, "manifest_hash": manifest_hash})
+                self._commit_publication(workspace, version, manifest_hash, expected_version)
+                return version
+            quarantine = folder.parent / f".{version}.incomplete-{uuid4().hex}"
+            folder.rename(quarantine)
         folder.mkdir(parents=True, mode=0o700)
         for parent in (self.root, folder.parent.parent, folder.parent):
             sync_directory(parent)

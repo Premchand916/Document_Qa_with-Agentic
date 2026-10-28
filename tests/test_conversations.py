@@ -268,3 +268,44 @@ class ConversationTests(OfflineCase):
             return time.perf_counter() - start if not tick.done() else 0
 
         self.assertEqual(asyncio.run(run()), 0)
+
+    def test_chat_deadline_keeps_capacity_reserved_until_native_work_exits(self):
+        from app.schemas import ChatRequest
+
+        async def run():
+            semaphore = asyncio.Semaphore(1)
+            with patch.object(self.server, "_CHAT_SLOTS", semaphore), \
+                    patch.object(self.server, "_chat_deadline_seconds", return_value=0.01), \
+                    patch.object(self.server, "_run_chat_graph",
+                                 side_effect=lambda *args: time.sleep(0.06) or {"response": "late"}):
+                with self.assertRaises(self.server.ChatDeadlineError):
+                    await self.server._run_bounded_chat(
+                        ChatRequest(query="alpha"), {"workspace_id": "local"}, [], "a" * 32, "request-key"
+                    )
+                self.assertEqual(semaphore._value, 0)
+                await asyncio.sleep(0.08)
+                self.assertEqual(semaphore._value, 1)
+
+        asyncio.run(run())
+
+    def test_chat_deadline_and_provider_failures_have_distinct_safe_codes(self):
+        from agents.orchestrator_agent import LLMConfigurationError
+        from fastapi.testclient import TestClient
+        self.seed_workspace()
+        client = self.stack.enter_context(TestClient(
+            self.server.app, raise_server_exceptions=False,
+            client=("127.0.0.1", 12345), base_url="http://127.0.0.1",
+        ))
+        self.server._graph = SimpleNamespace(invoke=lambda state: time.sleep(0.06) or {"response": "late"})
+        with patch.object(self.server, "_chat_deadline_seconds", return_value=0.01):
+            deadline = client.post("/api/chat", json={"query": "alpha", "idempotency_key": "deadline-key"})
+        self.assertEqual(deadline.status_code, 504)
+        self.assertEqual(deadline.json()["code"], "chat_deadline")
+
+        self.server._graph = SimpleNamespace(
+            invoke=lambda state: (_ for _ in ()).throw(LLMConfigurationError("SECRET provider detail"))
+        )
+        provider = client.post("/api/chat", json={"query": "alpha", "idempotency_key": "provider-key"})
+        self.assertEqual(provider.status_code, 503)
+        self.assertEqual(provider.json()["code"], "provider_unavailable")
+        self.assertNotIn("SECRET", provider.text)

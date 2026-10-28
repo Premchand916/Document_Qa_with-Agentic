@@ -12,6 +12,8 @@ class ApiAndGraphTests(OfflineCase):
         self.assertIn("deleteConversation()", html)
         self.assertIn("loadOlderConversation()", html)
         self.assertIn("submitCorrection()", html)
+        self.assertIn("waitForIngestion(jobId)", html)
+        self.assertIn("cancelIngestion()", html)
         self.assertIn("@media (max-width:760px)", html)
         self.assertIn("Delete this conversation permanently?", html)
 

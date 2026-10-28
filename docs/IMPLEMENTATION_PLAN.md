@@ -201,6 +201,8 @@ Start with structured task/source lookup. Add an episode embedding index only if
 
 ## Step 10 — Bounded execution and operational visibility
 
+**Local deterministic foundation passes:** upload work is persisted as owner-scoped idempotent jobs, full ingestion runs off the event loop under bounded admission, expiring leases support shared-local-worker recovery, publication is replay-safe, and status/cancel APIs plus stage timing are exposed. Chat capacity, deadline, and provider failures now have distinct safe codes; timed-out native work retains its slot until exit. Production p95/model latency, browser heap, multi-process load, multi-host scheduling, and hard native-call cancellation remain open. See [Step 10 results](STEP10_RESULTS.md).
+
 **Covers:** P02–P03; remaining concurrency/RAM hypotheses and provider availability.
 
 **Implement:** move blocking work out of the event loop using bounded execution and backpressure. Use isolated workers for heavy ingestion/hard deadlines; cancelling an awaiting request does not necessarily stop native model/parser work. Add durable ingestion jobs with queued/running/ready/failed states and idempotent publication.
@@ -236,4 +238,4 @@ The requested general assistant is a separate product scope beyond document QA. 
 - **C — Steps 6–8:** durable conversations, observable retrieval/reranking, evidence-based answers. Demonstrate an end-to-end follow-up.
 - **D — Steps 9–11:** optional episodic recall, measured operations, migration/scale decisions. Demonstrate release evidence.
 
-**Next implementation action: Step 10 durable jobs and operational load gates.** Steps 3, 6, and 9 now complete their local deterministic resource, shared-SQLite conversation, and selective-feedback gates. Step 8 completes checkpoint C's local evidence path. Production rollout has not occurred. Multi-host storage, trusted feedback-review roles, identity-provider deployment, physical-device UI checks, multilingual OCR, held-out model quality, and deployment-specific retention approval remain open. Passing checks do not establish production readiness.
+**Next implementation action: Step 11 held-out evaluation, migration rehearsal, and measured index scaling.** Steps 3, 6, 9, and 10 now complete their local deterministic resource, shared-SQLite conversation, selective-feedback, and durable-job foundation gates. Step 8 completes checkpoint C's local evidence path. Production rollout has not occurred. Multi-process load, multi-host storage, trusted feedback-review roles, identity-provider deployment, physical-device UI checks, multilingual OCR, held-out model quality, and deployment-specific retention approval remain open. Passing checks do not establish production readiness.
