@@ -1,6 +1,6 @@
 # RAG Architecture Implementation Plan
 
-**Status: Steps 0–5 and 7–8 pass local acceptance cases; Step 6 first slice is implemented, 28 October 2026.** See [baseline results](BASELINE.md), [Step 1 boundaries](STEP1_RESULTS.md), [Step 2 storage results](STEP2_RESULTS.md), [Step 3 results](STEP3_RESULTS.md), [Step 4 results](STEP4_RESULTS.md), [Step 5 results](STEP5_RESULTS.md), [Step 6 progress](STEP6_RESULTS.md), [Step 7 results](STEP7_RESULTS.md), and [Step 8 results](STEP8_RESULTS.md). There are 129 passing offline tests and no reproduced diagnostic defects; one rejection control passes with no probe errors. Shared identity-provider deployment remains unconfigured. This plan translates the [architecture audit](../ARCHITECTURE_REVIEW.md) into reviewable steps; confirmed failures and untested attack hypotheses remain separate.
+**Status: Steps 0–13 have implemented local slices; the Step 13 deterministic memory foundation passes, 28 October 2026.** See the linked result document in each step. The full baseline passes 187 offline tests and all six stages; diagnostics show zero reproduced defects, 25 not reproduced, one passing rejection control, zero failed controls, and zero probe errors. Step 12 release evidence, shared identity-provider deployment, and production validation remain incomplete. This plan translates the [architecture audit](../ARCHITECTURE_REVIEW.md) into reviewable steps; confirmed failures and untested attack hypotheses remain separate.
 
 ## Outcome and architecture decisions
 
@@ -233,6 +233,16 @@ Retain Flat as the reference. Benchmark HNSW when vector-search latency dominate
 
 **Next:** freeze release holdout v2 after the latest fixes, execute once, then obtain independent review if automated targets pass. Do not fine-tune while failures remain attributable to retrieval or reference resolution.
 
+## Step 13 — Four-layer memory architecture
+
+**Local foundation implemented:** working conversation memory and selective episodic feedback remain authoritative in their existing stores. Explicit semantic memory now supports scoped preferences/profile/constraints/terminology with expiry, inspection, deletion, secret/instruction rejection, and non-evidentiary prompt guidance. Procedural memory remains immutable graph/tool/prompt policy; see [Step 13 results](STEP13_RESULTS.md).
+
+**Decision:** do not place all memory into one vector database. Working, semantic, episodic, and procedural memory have different owners, trust, retention, recall, and deletion rules. Never auto-promote chat text into semantic or procedural memory.
+
+**Gate passed locally:** frozen deterministic checks prove cross-owner isolation, latest-value conflict handling, expiry, deletion, injection rejection, prompt evidence separation, and bounded local recall latency. Episodes still require verification and corpus match; procedures cannot be written through public memory APIs. Full baseline: 187 tests and all six stages pass.
+
+**Next:** run a separate label-blind real-model memory evaluation before changing recall ranking. Add relevance-ranked semantic recall only if it beats bounded deterministic recall. Keep Ollama fine-tuning paused until the user begins the separate fine-tuning phase.
+
 ## Expansion after the foundation
 
 The requested general assistant is a separate product scope beyond document QA. Build observable capabilities and measure them; exact replication of a proprietary assistant's internals is not a verifiable requirement.
@@ -250,4 +260,4 @@ The requested general assistant is a separate product scope beyond document QA. 
 - **C — Steps 6–8:** durable conversations, observable retrieval/reranking, evidence-based answers. Demonstrate an end-to-end follow-up.
 - **D — Steps 9–11:** optional episodic recall, measured operations, migration/scale decisions. Demonstrate release evidence.
 
-**Next implementation action: freeze a new release holdout v2 after the Step 12 retrieval fixes, execute it exactly once, and—only if automated targets pass—obtain and attach independent human review before rerunning the combined gate.** The exposed calibration and failed release-attempt sets are non-release evidence. Production rollout has not occurred. Multi-process load, multi-host storage, trusted review roles, identity-provider deployment, physical-device UI checks, multilingual OCR, cross-encoder deployment, and deployment-specific retention approval remain open. Passing checks do not establish production readiness.
+**Next implementation action: run a label-blind real-model memory-quality evaluation or, when explicitly started, begin the separately governed Ollama fine-tuning phase. Fine-tuning remains paused now.** Exposed calibration and failed release-attempt sets are non-release evidence. Production rollout has not occurred. Multi-process load, multi-host storage, trusted review roles, identity-provider deployment, physical-device UI checks, multilingual OCR, cross-encoder deployment, and deployment-specific retention approval remain open.

@@ -29,7 +29,7 @@ load_dotenv(ROOT_DIR / ".env")
 from agents.orchestrator_agent import get_active_provider, LLMConfigurationError, OllamaModelMemoryError
 from agents.question_generator import generate_questions
 from app.prompt_library import PROMPT_LIBRARY, get_prompt_categories
-from app.schemas import ChatRequest, EpisodeFeedbackRequest, ProviderRequest
+from app.schemas import ChatRequest, EpisodeFeedbackRequest, ProviderRequest, SemanticMemoryRequest
 from app.security import BoundaryMiddleware, MAX_FILE_BYTES, MAX_FILES, error_response
 from ingestion.file_loader import (IngestionLimitError, OCRConfigurationError, OCRRequiredError,
                                    parse_uploaded_file)
@@ -38,6 +38,8 @@ from ingestion.semantic_chunker import semantic_chunk_documents
 from langgraph_flow.graph_builder import build_graph
 from memory.followups import needs_reference_clarification, resolve_followup_query
 from memory.episodic_memory import EpisodeConflict, EpisodeNotFound, EpisodicMemoryRepository
+from memory.semantic_memory import (SemanticMemoryNotFound, SemanticMemoryRejected,
+                                    SemanticMemoryRepository)
 from utils.prompt_skill import build_prompted_query
 from vector_Store import faiss_store
 from vector_Store.faiss_store import build_vector_store
@@ -106,6 +108,18 @@ def get_episodic_repository() -> EpisodicMemoryRepository:
     )
 
 
+def get_semantic_repository() -> SemanticMemoryRepository:
+    raw_value = os.getenv("DOCQA_SEMANTIC_RETENTION_DAYS", "365").strip()
+    try:
+        retention_days = int(raw_value)
+    except ValueError as exc:
+        raise RuntimeError("DOCQA_SEMANTIC_RETENTION_DAYS must be an integer") from exc
+    return SemanticMemoryRepository(
+        Path(os.getenv("DOCQA_DATA_DIR") or faiss_store.DB_PATH),
+        retention_days=retention_days,
+    )
+
+
 def get_ingestion_repository() -> IngestionJobRepository:
     def configured(name: str, default: int, minimum: int, maximum: int) -> int:
         raw_value = os.getenv(name, str(default)).strip()
@@ -155,6 +169,16 @@ async def episode_conflict(request: Request, exc: EpisodeConflict):
     return error_response(409, "episode_conflict", "Feedback already exists for this completed turn.", request.state.request_id)
 
 
+@app.exception_handler(SemanticMemoryNotFound)
+async def semantic_memory_not_found(request: Request, exc: SemanticMemoryNotFound):
+    return error_response(404, "semantic_memory_not_found", "Saved memory was not found.", request.state.request_id)
+
+
+@app.exception_handler(SemanticMemoryRejected)
+async def semantic_memory_rejected(request: Request, exc: SemanticMemoryRejected):
+    return error_response(422, "semantic_memory_rejected", str(exc), request.state.request_id)
+
+
 @app.exception_handler(IngestionJobNotFound)
 async def ingestion_job_not_found(request: Request, exc: IngestionJobNotFound):
     return error_response(404, "ingestion_job_not_found", "Ingestion job was not found in this workspace.", request.state.request_id)
@@ -183,6 +207,7 @@ async def _startup():
     await asyncio.to_thread(repository.recover_expired)
     await asyncio.to_thread(repository.purge_expired)
     await asyncio.to_thread(get_episodic_repository().purge_expired)
+    await asyncio.to_thread(get_semantic_repository().purge_expired)
     jobs = get_ingestion_repository()
     await asyncio.to_thread(jobs.recover_expired)
     await asyncio.to_thread(jobs.purge_expired)
@@ -508,6 +533,9 @@ def _run_chat_graph(req: ChatRequest, context: dict, history: list[dict], conver
     episodic_context = get_episodic_repository().recall(
         context["workspace_id"], context["principal_id"], req.query, snapshot.version
     )
+    semantic_context = get_semantic_repository().recall(
+        context["workspace_id"], context["principal_id"]
+    )
     can_run = req.use_web_search or snapshot.vectorstore is not None or bool(snapshot.tabular_assets)
     if not can_run:
         raise HTTPException(
@@ -527,6 +555,7 @@ def _run_chat_graph(req: ChatRequest, context: dict, history: list[dict], conver
             "tabular_assets": snapshot.tabular_assets,
             "use_web_search": req.use_web_search,
             "episodic_context": episodic_context,
+            "semantic_context": semantic_context,
         },
     )
 
@@ -548,6 +577,7 @@ def _run_chat_graph(req: ChatRequest, context: dict, history: list[dict], conver
         "tabular_assets": snapshot.tabular_assets,
         "use_web_search": req.use_web_search,
         "episodic_context": episodic_context,
+        "semantic_context": semantic_context,
     }
 
     try:
@@ -723,6 +753,35 @@ async def delete_episode(episode_id: str, request: Request):
         context["workspace_id"], context["principal_id"], episode_id,
     )
     return {"deleted": True, "episode_id": episode_id}
+
+
+@app.put("/api/memories/semantic")
+async def save_semantic_memory(req: SemanticMemoryRequest, request: Request):
+    context = request.state.request_context
+    return await asyncio.to_thread(
+        get_semantic_repository().upsert,
+        context["workspace_id"], context["principal_id"], req.category, req.key, req.value,
+    )
+
+
+@app.get("/api/memories/semantic")
+async def list_semantic_memories(request: Request, limit: int = Query(50, ge=1, le=100)):
+    context = request.state.request_context
+    memories = await asyncio.to_thread(
+        get_semantic_repository().list_recent,
+        context["workspace_id"], context["principal_id"], limit=limit,
+    )
+    return {"memories": memories}
+
+
+@app.delete("/api/memories/semantic/{memory_id}")
+async def delete_semantic_memory(memory_id: str, request: Request):
+    context = request.state.request_context
+    await asyncio.to_thread(
+        get_semantic_repository().delete,
+        context["workspace_id"], context["principal_id"], memory_id,
+    )
+    return {"deleted": True, "memory_id": memory_id}
 
 
 @app.get("/api/state")

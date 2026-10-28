@@ -203,3 +203,30 @@ Use this record for foundation changes: understand requirements, state invariant
 - A fresh release attempt failed citation precision at 0.786 versus 0.80 and exposed wrong-version follow-up retrieval. The set was retired before fixes.
 - Added relative lexical filtering, exact-version retrieval, clean abstention, and evidence-review preservation from those observations.
 - Release and fine-tuning remain blocked. Next evidence must come from a new post-fix set and an independent human reviewer.
+
+## Active work — Step 13 four-layer memory
+
+### Requirements
+
+- Keep working, semantic, episodic, and procedural memory separate; each has different authority, trust, recall, retention, and deletion semantics.
+- Never auto-extract semantic facts or procedures from ordinary chat.
+- Semantic memory must be explicit, owner/workspace scoped, bounded, expiring, inspectable, replaceable, and deletable.
+- Semantic and episodic context guide responses but never count as document or web evidence.
+- Procedures remain code/operator-owned until trusted administrator approval and audit roles exist.
+
+### Design
+
+- Continue using `ConversationRepository` for bounded working history and recap.
+- Store semantic memory in the shared local conversation SQLite database without a conversation foreign key, so conversation deletion does not erase separately approved stable preferences.
+- Keep episodes tied to source conversations and corpus versions with verified-only recall.
+- Treat graph routing, allowlisted tools, prompt library, and operator-selected prompt skills as procedural memory. Record prompt-skill hash/source; do not discover arbitrary home-directory files.
+
+### Result — 28 October 2026
+
+- Added semantic-memory repository, APIs, UI controls, expiry, capacity/character bounds, owner isolation, and prompt integration.
+- Added persistent secret and instruction-override rejection.
+- Hardened procedural guidance discovery to repository or explicit operator configuration and added SHA-256 identity.
+- Added frozen deterministic memory evaluation for recall, conflict replacement, isolation, expiry, deletion, injection rejection, evidence separation, and latency.
+- Full baseline passed 187 tests; zero reproduced diagnostic defects; 25 defects not reproduced; one rejection control passed; zero failed controls or probe errors; ingestion, index, memory, and environment stages passed.
+- Local SQLite recall was 0.441 ms p95 across 100 iterations. This is development evidence, not a production SLO or model-quality measurement.
+- The deterministic memory foundation is complete. Fine-tuning remains paused; any next memory-quality run must be label-blind and model-backed.

@@ -19,6 +19,14 @@ This system enables users to upload documents (PDF, PPT, Excel, CSV, JSON, etc.)
 - 🎯 Clean answers with minimal hallucination
 - 📌 Versioned evidence IDs and validated citations
 - 🔎 Bounded local OCR for images and scanned PDFs
+- 🧠 Bounded working memory, explicit semantic memory, and verified episodic feedback
+- 🛡️ Versioned code/operator-owned procedural guidance; no self-modifying procedures
+
+Validate the memory foundation without a model call:
+
+```bash
+python3 -m tools.evaluate_memory
+```
 
 ---
 
@@ -147,6 +155,7 @@ DOCQA_AUTH_MODE=local
 DOCQA_TURN_LEASE_SECONDS=60
 DOCQA_CONVERSATION_RETENTION_DAYS=90
 DOCQA_EPISODE_RETENTION_DAYS=180
+DOCQA_SEMANTIC_RETENTION_DAYS=365
 DOCQA_CHAT_DEADLINE_SECONDS=120
 DOCQA_INGESTION_LEASE_SECONDS=120
 DOCQA_INGESTION_RETENTION_DAYS=7

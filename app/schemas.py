@@ -53,3 +53,12 @@ class EpisodeFeedbackRequest(BaseModel):
     idempotency_key: Annotated[str, StringConstraints(strict=True, min_length=8, max_length=128)]
     correction: Annotated[str, StringConstraints(strict=True, strip_whitespace=True,
                                                   min_length=1, max_length=4000)]
+
+
+class SemanticMemoryRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    category: Literal["preference", "profile", "constraint", "terminology"]
+    key: Annotated[str, StringConstraints(strict=True, strip_whitespace=True,
+                                          min_length=1, max_length=64)]
+    value: Annotated[str, StringConstraints(strict=True, strip_whitespace=True,
+                                            min_length=1, max_length=1000)]

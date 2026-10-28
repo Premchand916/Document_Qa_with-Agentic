@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "evaluation_id": "docqa-memory-foundation-2026-10-v1",
+  "required_checks": [
+    "explicit_recall",
+    "latest_value_wins",
+    "owner_workspace_isolation",
+    "expiry",
+    "deletion",
+    "injection_rejection",
+    "non_evidentiary_prompt_boundary",
+    "latency"
+  ],
+  "latency": {
+    "iterations": 100,
+    "maximum_p95_ms": 50.0
+  }
+}

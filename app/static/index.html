@@ -617,6 +617,31 @@ body{display:flex;flex-direction:column;position:relative;z-index:1}
 
     <div class="div"></div>
 
+    <div class="save-sec">
+      <div class="notes-hdr">
+        <span class="ctrl-lbl">Semantic Memory</span>
+        <span class="n-cnt" x-text="memories.length"></span>
+      </div>
+      <button class="save-btn" type="button" :disabled="busy" @click="addSemanticMemory()">
+        <span>＋</span><span>Remember preference or profile fact</span>
+      </button>
+      <div class="resp-meta" role="status" x-show="memoryStatus" x-text="memoryStatus"></div>
+      <div class="n-list" x-show="memories.length">
+        <template x-for="memory in memories" :key="memory.memory_id">
+          <div class="note">
+            <div class="note-src" x-text="memory.category+' · '+memory.key"></div>
+            <div class="note-txt" x-text="memory.value"></div>
+            <div class="note-ft">
+              <span class="note-ts">Explicit · not evidence</span>
+              <button class="note-del" type="button" :aria-label="'Delete memory '+memory.key" @click="deleteSemanticMemory(memory.memory_id)">✕</button>
+            </div>
+          </div>
+        </template>
+      </div>
+    </div>
+
+    <div class="div"></div>
+
     <!-- Notes empty -->
     <div class="notes-empty" x-show="notes.length===0">
       <div class="n-ico">📝</div>
@@ -664,7 +689,7 @@ function nexus() {
     files: [], dragging: false, indexing: false, uploadWarnings: [], ingestionJob: null, ingestionStage: 'Indexing documents…',
     chatHistory: [], conversations: [], conversationId: '', conversationNextBefore: null, pendingSubmission: null, corpusVersion: null, txt: '', loading: false,
     srcKey: null,
-    notes: [], lastRes: null, feedbackStatus: '',
+    notes: [], memories: [], lastRes: null, feedbackStatus: '', memoryStatus: '',
     questions: [],
     err: null,
     statusText: 'Upload files to begin', statusReady: false,
@@ -712,6 +737,7 @@ function nexus() {
       this.uploadWarnings = s.warnings || [];
       this.corpusVersion = s.corpus_version || null;
       await this.refreshConversations(true);
+      await this.refreshSemanticMemories();
       const jobsResponse = await this.apiFetch('/api/ingestion-jobs?limit=10');
       if(jobsResponse.ok) {
         const active=((await jobsResponse.json()).jobs||[]).find(job=>['queued','running','cancel_requested'].includes(job.status));
@@ -776,7 +802,7 @@ function nexus() {
       if (this.busy || workspace === this.workspaceId || !this.workspaces.includes(workspace)) return;
       this.switching=true;
       this.workspaceId=workspace;
-      this.chatHistory=[]; this.conversationId=''; this.conversationNextBefore=null; this.pendingSubmission=null; this.conversations=[]; this.notes=[]; this.lastRes=null; this.feedbackStatus=''; this.srcKey=null;
+      this.chatHistory=[]; this.conversationId=''; this.conversationNextBefore=null; this.pendingSubmission=null; this.conversations=[]; this.notes=[]; this.memories=[]; this.lastRes=null; this.feedbackStatus=''; this.memoryStatus=''; this.srcKey=null;
       this.txt=''; this.files=[]; this.questions=[]; this.err=null; this.uploadWarnings=[];
       this.statusReady=false; this.statusText='Loading workspace';
       try { await this.loadWorkspace(); }
@@ -975,6 +1001,31 @@ function nexus() {
       })});
       if(!r.ok) { this.err=await this.apiError(r, 'Could not save correction'); return; }
       this.feedbackStatus='Correction saved as unverified feedback.';
+    },
+    async refreshSemanticMemories(){
+      const r=await this.apiFetch('/api/memories/semantic');
+      if(!r.ok) throw new Error(await this.apiError(r,'Could not load semantic memory'));
+      this.memories=(await r.json()).memories||[];
+    },
+    async addSemanticMemory(){
+      if(this.busy) return;
+      const category=(globalThis.prompt('Memory category: preference, profile, constraint, or terminology','preference')||'').trim().toLowerCase();
+      if(!['preference','profile','constraint','terminology'].includes(category)) { this.err='Choose preference, profile, constraint, or terminology.'; return; }
+      const key=(globalThis.prompt('Memory name, for example “Answer style”')||'').trim();
+      if(!key) return;
+      const value=(globalThis.prompt('What should Nexus remember? Do not enter secrets or credentials.')||'').trim();
+      if(!value) return;
+      const r=await this.apiFetch('/api/memories/semantic',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({category,key,value})});
+      if(!r.ok) { this.err=await this.apiError(r,'Could not save semantic memory'); return; }
+      await this.refreshSemanticMemories();
+      this.memoryStatus='Memory saved explicitly. It guides responses but is not evidence.';
+    },
+    async deleteSemanticMemory(memoryId){
+      if(this.busy || !globalThis.confirm('Delete this saved memory?')) return;
+      const r=await this.apiFetch('/api/memories/semantic/'+encodeURIComponent(memoryId),{method:'DELETE'});
+      if(!r.ok) { this.err=await this.apiError(r,'Could not delete semantic memory'); return; }
+      await this.refreshSemanticMemories();
+      this.memoryStatus='Memory deleted.';
     },
     delNote(i){ this.notes.splice(i,1); },
     exportNotes(){
