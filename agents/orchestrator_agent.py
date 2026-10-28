@@ -1,5 +1,8 @@
 import json
 import os
+import time
+from contextlib import contextmanager
+from contextvars import ContextVar
 from functools import lru_cache
 from pathlib import Path
 from urllib.error import HTTPError, URLError
@@ -20,6 +23,7 @@ DEFAULT_OLLAMA_FALLBACK_MODELS = (
     "qwen2.5:0.5b",
 )
 SMALL_MODEL_HINTS = ("0.5b", "1b", "1.5b", "2b", "3b", "mini", "small")
+_MODEL_CALLS: ContextVar[list[dict] | None] = ContextVar("docqa_model_calls", default=None)
 
 
 class LLMConfigurationError(RuntimeError):
@@ -28,6 +32,48 @@ class LLMConfigurationError(RuntimeError):
 
 class OllamaModelMemoryError(RuntimeError):
     """Raised when the configured Ollama model does not fit in memory."""
+
+
+@contextmanager
+def capture_model_calls():
+    """Capture aggregate-safe model metadata for an explicit evaluation run."""
+    calls: list[dict] = []
+    token = _MODEL_CALLS.set(calls)
+    try:
+        yield calls
+    finally:
+        _MODEL_CALLS.reset(token)
+
+
+def _record_model_call(response, *, provider: str, model: str, elapsed_ms: float) -> None:
+    calls = _MODEL_CALLS.get()
+    if calls is None:
+        return
+    usage = getattr(response, "usage_metadata", None) or {}
+    metadata = getattr(response, "response_metadata", None) or {}
+    input_tokens = usage.get("input_tokens", metadata.get("prompt_eval_count", 0))
+    output_tokens = usage.get("output_tokens", metadata.get("eval_count", 0))
+    calls.append({
+        "provider": provider,
+        "model": str(metadata.get("model") or model),
+        "latency_ms": round(elapsed_ms, 3),
+        "token_usage": {
+            "input": int(input_tokens or 0),
+            "output": int(output_tokens or 0),
+        },
+    })
+
+
+def _invoke_and_record(llm, prompt, *, provider: str, model: str):
+    started = time.monotonic()
+    response = llm.invoke(prompt)
+    _record_model_call(
+        response,
+        provider=provider,
+        model=model,
+        elapsed_ms=(time.monotonic() - started) * 1000,
+    )
+    return response
 
 
 def get_active_provider():
@@ -197,12 +243,16 @@ def invoke_orchestrator(prompt, *, provider=None):
     if provider not in ("gemini", "ollama"):
         raise LLMConfigurationError("Unknown model provider")
     if provider != "ollama":
-        return _get_gemini_llm().invoke(prompt)
+        model = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
+        return _invoke_and_record(_get_gemini_llm(), prompt, provider="gemini", model=model)
 
     primary_model, base_url = _get_ollama_settings()
 
     try:
-        return _get_ollama_llm(primary_model, base_url).invoke(prompt)
+        return _invoke_and_record(
+            _get_ollama_llm(primary_model, base_url), prompt,
+            provider="ollama", model=primary_model,
+        )
     except Exception as exc:
         if _is_ollama_unavailable_error(exc):
             raise LLMConfigurationError(_build_ollama_unavailable_message(base_url)) from exc
@@ -213,7 +263,10 @@ def invoke_orchestrator(prompt, *, provider=None):
     for candidate_model in _get_fallback_candidates(primary_model, base_url):
         attempted_models.append(candidate_model)
         try:
-            response = _get_ollama_llm(candidate_model, base_url).invoke(prompt)
+            response = _invoke_and_record(
+                _get_ollama_llm(candidate_model, base_url), prompt,
+                provider="ollama", model=candidate_model,
+            )
         except Exception as fallback_exc:
             message = str(fallback_exc).lower()
             if _is_ollama_unavailable_error(fallback_exc):

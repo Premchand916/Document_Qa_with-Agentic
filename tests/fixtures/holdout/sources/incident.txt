@@ -1,0 +1,1 @@
+The Helios incident policy requires escalation to the security duty manager within 45 minutes of confirming a severity-one incident. Evidence collected for a security incident must be retained for 400 days. The policy owner is Security Operations.

@@ -114,6 +114,66 @@ class RetrievalTests(OfflineCase):
         self.assertEqual(state["result_status"], "insufficient_evidence")
         self.assertIn("No relevant information", state["response"])
 
+    def test_fallback_relevance_gate_rejects_distant_vector_only_results(self):
+        from agents.retriever_agent import retriever_agent
+        from retrieval.reranker import RerankResult
+        docs = self.documents()
+        distant = SimpleNamespace(
+            docstore=SimpleNamespace(_dict=dict(enumerate(docs))),
+            similarity_search_with_score=lambda query, k: [(docs[0], 1.8), (docs[1], 1.9)],
+        )
+        with patch("agents.retriever_agent.rerank_with_status",
+                   return_value=RerankResult(docs, None, "missing", "fallback", "model_unavailable")):
+            result = retriever_agent({"query": "xylophone warranty", "vectorstore": distant})
+        self.assertEqual(result["documents"], [])
+        self.assertEqual(result["retrieval_status"]["relevance_gate"]["status"], "insufficient_evidence")
+
+    def test_fallback_relevance_gate_prefers_lexical_evidence(self):
+        from agents.retriever_agent import retriever_agent
+        from retrieval.reranker import RerankResult
+        docs = self.documents()
+        store = SimpleNamespace(
+            docstore=SimpleNamespace(_dict=dict(enumerate(docs))),
+            similarity_search_with_score=lambda query, k: [(docs[1], 0.2), (docs[0], 0.3)],
+        )
+        with patch("agents.retriever_agent.rerank_with_status",
+                   side_effect=lambda query, found, top_k: RerankResult(found[:top_k], None, "missing", "fallback")):
+            result = retriever_agent({"query": "alpha", "vectorstore": store})
+        self.assertEqual(result["documents"], [docs[0]])
+        self.assertEqual(result["retrieval_status"]["relevance_gate"]["status"], "lexical_fallback")
+
+    def test_fallback_lexical_gate_rejects_one_generic_word_overlap(self):
+        from agents.retriever_agent import retriever_agent
+        from langchain_core.documents import Document
+        from retrieval.reranker import RerankResult
+        relevant = Document(page_content="Meridian recovery drill every six months", metadata={"source": "continuity.txt"})
+        generic = Document(page_content="Purchases require approval", metadata={"source": "procurement.txt"})
+        store = SimpleNamespace(
+            docstore=SimpleNamespace(_dict={0: generic, 1: relevant}),
+            similarity_search_with_score=lambda query, k: [(relevant, 0.2), (generic, 0.3)],
+        )
+        with patch("agents.retriever_agent.rerank_with_status",
+                   side_effect=lambda query, found, top_k: RerankResult(found[:top_k], None, "missing", "fallback")):
+            result = retriever_agent({"query": "What does Meridian require for a recovery drill?", "vectorstore": store})
+        self.assertEqual(result["documents"], [relevant])
+
+    def test_explicit_version_in_resolved_query_filters_other_versions(self):
+        from agents.retriever_agent import retriever_agent
+        from langchain_core.documents import Document
+        from retrieval.reranker import RerankResult
+        first = Document(page_content="Pioneer procedure version 1 notify regulator", metadata={"source": "v1.txt"})
+        second = Document(page_content="Pioneer procedure version 2 notify regulator", metadata={"source": "v2.txt"})
+        store = SimpleNamespace(
+            docstore=SimpleNamespace(_dict={0: first, 1: second}),
+            similarity_search_with_score=lambda query, k: [(first, 0.2), (second, 0.21)],
+        )
+        with patch("agents.retriever_agent.rerank_with_status",
+                   side_effect=lambda query, found, top_k: RerankResult(found[:top_k], None, "missing", "fallback")):
+            result = retriever_agent({"query": "Pioneer procedure version 2 notify regulator",
+                                      "vectorstore": store})
+        self.assertEqual(result["documents"], [second])
+        self.assertEqual(result["retrieval_status"]["relevance_gate"]["status"], "explicit_version")
+
     def test_enabled_reranker_and_fallback_use_the_same_candidate_set(self):
         from retrieval.reranker import rerank_with_status
         docs = self.documents()

@@ -89,6 +89,9 @@ class EvaluationTests(unittest.TestCase):
         labels = {
             "schema_version": 2,
             "split": "holdout",
+            "release_candidate": True,
+            "dataset_id": "holdout-test-v1",
+            "corpus_fixture_sha256": "abc",
             "release_targets": {
                 "minimum": {"coverage": 1, "answer_contract_rate": 1, "mean_evidence_recall_at_5": 1,
                             "mean_reciprocal_rank": 1, "abstention_accuracy": 1,
@@ -103,7 +106,9 @@ class EvaluationTests(unittest.TestCase):
         envelope = {"run": {
             "provider": "ollama", "model": "test", "model_revision": "sha256:test",
             "embedding_identity": "test:2", "generated_at_utc": "2026-10-28T00:00:00Z",
-            "split": "holdout", "corpus_fixture_sha256": "abc",
+            "split": "holdout", "corpus_fixture_sha256": "abc", "dataset_id": "holdout-test-v1",
+            "manual_review": {"reviewer": "reviewer@example.test", "reviewed_at_utc": "2026-10-28T01:00:00Z",
+                              "independent_from_candidate_author": True, "method": "human"},
         }, "predictions": [{
             "id": "H01", "answer": "alpha", "evidence_sources": ["a.txt"],
             "cited_sources": ["a.txt"], "abstained": False, "tool_result": None,
@@ -113,10 +118,16 @@ class EvaluationTests(unittest.TestCase):
         report = score_predictions(labels, envelope)
         self.assertTrue(report["quality_gate_passed"])
         self.assertTrue(report["release_eligible"])
+        self.assertTrue(report["independent_review_verified"])
         self.assertEqual(report["latency_ms_p95"], 10)
         self.assertEqual(report["token_usage"], {"input": 5, "output": 2})
         self.assertFalse(score_predictions({**labels, "split": "development"},
                          {**envelope, "run": {**envelope["run"], "split": "development"}})["release_eligible"])
+
+        without_review = {**envelope, "run": {key: value for key, value in envelope["run"].items()
+                                               if key != "manual_review"}}
+        self.assertFalse(score_predictions(labels, without_review)["release_eligible"])
+        self.assertFalse(score_predictions({**labels, "release_candidate": False}, envelope)["release_eligible"])
 
     def test_rich_run_rejects_missing_metadata_and_split_mismatch(self):
         with self.assertRaisesRegex(ValueError, "metadata missing"):

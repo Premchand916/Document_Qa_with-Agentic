@@ -177,3 +177,29 @@ Use this record for foundation changes: understand requirements, state invariant
 - Added isolated Flat/HNSW benchmark to the full baseline. At 5,000×64D vectors, exact Flat p95 was 0.0203 ms; HNSW p95 was 0.0395 ms with Recall@10 0.981 and 2.06× serialized size. Decision: retain Flat.
 - Full baseline passed: 169 tests; zero reproduced defects; 25 defects not reproduced; one rejection control passed; zero probe errors; ingestion, OCR, embeddings, index benchmark, and environment stages passed.
 - Release/fine-tuning gate remains blocked by design: current labels are development data and no separately frozen held-out real-model run plus independent review exists.
+
+## Active work — Step 12 label-blind candidate evidence
+
+### Requirements
+
+- Inference code must never load labels, rubrics, expected fragments, release targets, or review decisions.
+- Frozen tasks and source bytes must hash to the identity recorded by labels and the prediction run.
+- Record actual model and embedding revisions, graph latency, model-call tokens, retrieved/cited sources, abstention, and exact tool results.
+- A dataset stops being held out as soon as its result influences implementation or labels. Machine-mark exposed sets non-release.
+- Release eligibility requires a fresh release-candidate set, all automated targets, and complete independent human review metadata and decisions.
+
+### Design
+
+- Keep `tasks.json` and `labels.json` separate. Recursively reject label-only keys from the task manifest.
+- Capture aggregate-safe model metadata through a request-local context variable; never persist prompts or response content in telemetry.
+- Use a manual-review worksheet with immutable candidate identity. Attach only complete decisions from a named independent reviewer.
+- When the optional cross-encoder is absent, combine relative BM25 filtering with a calibrated embedding-distance rejection. Surface the chosen relevance-gate path.
+- Resolve explicit version references deterministically before generation.
+
+### Result — 28 October 2026
+
+- Built and tested the complete label-blind Ollama evaluation, review, scoring, migration, and combined-gate workflow.
+- The calibration run passed automated targets but is permanently non-release because it drove fixes.
+- A fresh release attempt failed citation precision at 0.786 versus 0.80 and exposed wrong-version follow-up retrieval. The set was retired before fixes.
+- Added relative lexical filtering, exact-version retrieval, clean abstention, and evidence-review preservation from those observations.
+- Release and fine-tuning remain blocked. Next evidence must come from a new post-fix set and an independent human reviewer.

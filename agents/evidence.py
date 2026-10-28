@@ -65,8 +65,9 @@ def finalize_answer(state: dict) -> dict:
         state["result_status"] = "citation_error"
         cited = []
     elif response and documents and not cited:
-        cited = [documents[0].metadata["evidence_id"]]
-        state["response"] = f"{response}\n\nEvidence reviewed: [{cited[0]}]"
+        cited = list(dict.fromkeys(document.metadata["evidence_id"] for document in documents))
+        reviewed = " ".join(f"[{item}]" for item in cited)
+        state["response"] = f"{response}\n\nEvidence reviewed: {reviewed}"
     state["citations"] = [{"evidence_id": item, "source": evidence[item].metadata.get("source", "Unknown"),
                            "location": evidence[item].metadata.get("page", evidence[item].metadata.get("sheet")),
                            "origin": evidence[item].metadata.get("origin"),

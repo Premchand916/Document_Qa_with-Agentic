@@ -52,6 +52,7 @@ class EvidenceContractTests(OfflineCase):
         self.assertEqual(result["evidence_status"]["status"], "possible_conflict")
         self.assertEqual(result["evidence_status"]["sources"], ["new.txt", "old.txt"])
         self.assertEqual(len(result["documents"]), 2)
+        self.assertEqual({item["source"] for item in result["citations"]}, {"old.txt", "new.txt"})
 
     def test_graph_uses_one_planning_call_and_handles_missing_vectorstore(self):
         from langgraph_flow.graph_builder import build_graph

@@ -223,6 +223,16 @@ Retain Flat as the reference. Benchmark HNSW when vector-search latency dominate
 
 **Gate:** repaired deterministic cases pass; held-out quality meets baseline-derived release targets; authorization, restart, disk-failure, browser, parser, and concurrency checks have evidence. Rehearse migration on copies, retain the previous compatible app/schema/corpus version, and test rollback before deployment.
 
+## Step 12 — Label-blind local-model release evidence
+
+**Pipeline complete; release still blocked:** separate hashed inference/label bundles, real Ollama graph execution, per-call usage capture, review worksheet/attachment, dataset-retirement protection, and combined release gating are implemented. The first fresh release attempt failed citation precision and exposed follow-up version selection defects. It was retired before fixes; see [Step 12 results](STEP12_RESULTS.md).
+
+**Implemented:** label leakage rejection; corpus/run identity matching; `llama3.2:3b` model revision capture; retrieval, citation, abstention, table, latency, and token evidence; explicit independent-review metadata; copy-only migration evidence; fallback relevance gating; exact version filtering.
+
+**Gate:** only a never-executed `release_candidate` dataset may support a candidate. Once results influence code or labels, retire that dataset. Automated targets must pass before independent human review; the combined gate must still pass after review attachment.
+
+**Next:** freeze release holdout v2 after the latest fixes, execute once, then obtain independent review if automated targets pass. Do not fine-tune while failures remain attributable to retrieval or reference resolution.
+
 ## Expansion after the foundation
 
 The requested general assistant is a separate product scope beyond document QA. Build observable capabilities and measure them; exact replication of a proprietary assistant's internals is not a verifiable requirement.
@@ -240,4 +250,4 @@ The requested general assistant is a separate product scope beyond document QA. 
 - **C — Steps 6–8:** durable conversations, observable retrieval/reranking, evidence-based answers. Demonstrate an end-to-end follow-up.
 - **D — Steps 9–11:** optional episodic recall, measured operations, migration/scale decisions. Demonstrate release evidence.
 
-**Next implementation action: freeze a separate held-out set, run the configured local Ollama candidate without label leakage, complete independent manual review, and execute the combined release-evidence gate.** Steps 3, 6, 9, 10, and Step 11's local tooling now complete their deterministic foundation gates. Production rollout has not occurred. Multi-process load, multi-host storage, trusted feedback-review roles, identity-provider deployment, physical-device UI checks, multilingual OCR, held-out model quality, and deployment-specific retention approval remain open. Passing checks do not establish production readiness.
+**Next implementation action: freeze a new release holdout v2 after the Step 12 retrieval fixes, execute it exactly once, and—only if automated targets pass—obtain and attach independent human review before rerunning the combined gate.** The exposed calibration and failed release-attempt sets are non-release evidence. Production rollout has not occurred. Multi-process load, multi-host storage, trusted review roles, identity-provider deployment, physical-device UI checks, multilingual OCR, cross-encoder deployment, and deployment-specific retention approval remain open. Passing checks do not establish production readiness.

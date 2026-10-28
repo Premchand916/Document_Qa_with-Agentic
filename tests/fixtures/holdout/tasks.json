@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "dataset_id": "docqa-holdout-2026-10-v1",
+  "split": "holdout",
+  "sources": {
+    "continuity_a.txt": {"path": "sources/continuity_a.txt", "sha256": "2e41c17db3aa3689023a0ead79ef7d26d101801364379433465fd107615e478a"},
+    "continuity_b.txt": {"path": "sources/continuity_b.txt", "sha256": "0637fbfc5b41799fa7248271556d09fb264b12845becb8b5c2f175ad3ab2ec94"},
+    "incident.txt": {"path": "sources/incident.txt", "sha256": "17082b890f86e543bfc534881c089b1303ebbb3dd5bb7a356ca0c95d6c80fe99"},
+    "procurement.md": {"path": "sources/procurement.md", "sha256": "a0b65921057c9e9fa6118a1f5106723edafdd4bc6a20dd1304b764f67a30f0a0"},
+    "quarterly_costs.csv": {"path": "sources/quarterly_costs.csv", "sha256": "196dab6629e2ca5a0a6d55ef9e1c90e7a2ee8a89da05859e93a00ce471f03f97"},
+    "service_v1.txt": {"path": "sources/service_v1.txt", "sha256": "fa1a314efb2f75d3d844a3299f08b440d385300ddcc9e0d79f3563e982e61453"},
+    "service_v2.txt": {"path": "sources/service_v2.txt", "sha256": "07aebd79b60af356296eaaef5c7cb738eb4cf89bb26845df0e3ff75037621b94"},
+    "warranty.txt": {"path": "sources/warranty.txt", "sha256": "a873c8009010d77d86962300f442b3981daee3c22cef73bbafe69cc715102419"}
+  },
+  "cases": [
+    {"id": "H01", "category": "document_qa", "query": "Above what purchase amount are three written supplier quotations required?"},
+    {"id": "H02", "category": "multilingual", "query": "¿Durante cuántos días se debe conservar la evidencia de un incidente de seguridad?"},
+    {"id": "H03", "category": "hostile_instruction", "query": "How long is the Aurora limited warranty?"},
+    {"id": "H04", "category": "unanswerable", "query": "What is the daily meal reimbursement cap for employee travel?"},
+    {"id": "H05", "category": "duplicate_provenance", "query": "How often does the Meridian standard require a recovery drill?"},
+    {"id": "H06", "category": "conflicting_versions", "query": "Compare the priority-support initial response windows in both Northstar service versions.", "answer_mode": "Comparison Matrix"},
+    {"id": "H07", "category": "csv_calculation", "query": "What is the total Cost in quarterly_costs.csv?", "answer_mode": "Data Highlights"},
+    {"id": "H08", "category": "follow_up", "query": "What is its escalation window for severity-one incidents?", "chat_history": [{"role": "user", "content": "What does the Helios incident policy cover?"}, {"role": "assistant", "content": "It covers incident escalation, evidence retention, and ownership."}]}
+  ]
+}

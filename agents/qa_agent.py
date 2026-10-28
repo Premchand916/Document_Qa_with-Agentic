@@ -35,7 +35,7 @@ def qa_agent(state):
             return state
         state["result_status"] = "insufficient_evidence"
         state["response"] = (
-            "No relevant information found. "
+            "No relevant information found; the requested information is not available. "
             + ("Try a different search query." if is_web else
                "Try uploading a document that covers this topic.")
         )

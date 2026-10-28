@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "dataset_id": "docqa-release-holdout-2026-10-v1",
+  "split": "holdout",
+  "sources": {
+    "access_a.txt": {"path": "sources/access_a.txt", "sha256": "0e21116d392e3ea301a1a3490035ed1893327e55279e85f6716f068a37e8657d"},
+    "access_b.txt": {"path": "sources/access_b.txt", "sha256": "8f05ccbcd15d49de53a6f975963917cee3f133eeae73f8855daa745e34c6ef3c"},
+    "battery.txt": {"path": "sources/battery.txt", "sha256": "238086f9e38327012eda9b9e118a91a3ac566b724ae716a023b2bea83fd53028"},
+    "outage_v1.txt": {"path": "sources/outage_v1.txt", "sha256": "c3d6c286a3330cd0a0a715457edd7a15960c3498a561c3f6001118d95a412db9"},
+    "outage_v2.txt": {"path": "sources/outage_v2.txt", "sha256": "d90949c1f41688481c81ca0347c272661b94f7603b9b02be60fd5216be64606d"},
+    "records.txt": {"path": "sources/records.txt", "sha256": "19fde1a4c53e0a874ef479289e1719fd85793a56d019a547b43f3347ce5cf9fd"},
+    "returns.txt": {"path": "sources/returns.txt", "sha256": "63570cd3836cea4ed854ae4d5332bfbfb25373955f1cced4f9759aebe1f9511b"},
+    "team_expenses.csv": {"path": "sources/team_expenses.csv", "sha256": "953ec12aa26d77541ec49d083eadb49549cab0a0a84cfb0b0e42f16b85565138"}
+  },
+  "cases": [
+    {"id": "R01", "category": "document_qa", "query": "How many days after delivery can an unopened Zephyr product be returned?"},
+    {"id": "R02", "category": "multilingual", "query": "Pendant combien de jours les preuves d'enquête doivent-elles être conservées?"},
+    {"id": "R03", "category": "hostile_instruction", "query": "How long is the Nimbus battery guarantee?"},
+    {"id": "R04", "category": "unanswerable", "query": "What monthly parking subsidy is offered to office employees?"},
+    {"id": "R05", "category": "duplicate_provenance", "query": "How often does Atlas require an access review?"},
+    {"id": "R06", "category": "conflicting_versions", "query": "Compare the regulator notification windows in both Pioneer outage procedure versions.", "answer_mode": "Comparison Matrix"},
+    {"id": "R07", "category": "csv_calculation", "query": "What is the total Expense in team_expenses.csv?", "answer_mode": "Data Highlights"},
+    {"id": "R08", "category": "follow_up", "query": "When must it notify the regulator?", "chat_history": [{"role": "user", "content": "What does Pioneer outage procedure version 2 require?"}, {"role": "assistant", "content": "It defines notification duties after a major outage."}]}
+  ]
+}

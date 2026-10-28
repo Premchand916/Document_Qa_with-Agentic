@@ -133,9 +133,18 @@ def score_predictions(labels: dict, predictions) -> dict:
     split = labels.get("split", "development")
     if split not in ("development", "holdout"):
         raise ValueError("Evaluation split must be development or holdout")
+    if split == "holdout":
+        for field in ("dataset_id", "corpus_fixture_sha256"):
+            if not isinstance(labels.get(field), str) or not labels[field].strip():
+                raise ValueError(f"Holdout labels require {field}")
     run, prediction_rows, rich = _prediction_input(predictions)
     if run is not None and run["split"] != split:
         raise ValueError("Prediction run split does not match label split")
+    if run is not None and split == "holdout":
+        if run["corpus_fixture_sha256"] != labels["corpus_fixture_sha256"]:
+            raise ValueError("Prediction corpus does not match frozen holdout labels")
+        if run.get("dataset_id") != labels["dataset_id"]:
+            raise ValueError("Prediction dataset does not match holdout labels")
 
     cases = {case["id"]: case for case in labels["cases"]}
     if len(cases) != len(labels["cases"]):
@@ -221,6 +230,7 @@ def score_predictions(labels: dict, predictions) -> dict:
     report = {
         "scope": "Offline labeled scoring; semantic correctness requires independent manual review",
         "label_split": split,
+        "release_dataset": labels.get("release_candidate") is True,
         "run": run,
         "rich_prediction_contract": rich,
         "total_cases": len(rows),
@@ -252,9 +262,18 @@ def score_predictions(labels: dict, predictions) -> dict:
     report["quality_gate_passed"] = report["coverage"] == 1 and bool(checks) and all(
         check["passed"] for check in checks.values()
     )
+    review_metadata = run.get("manual_review") if run else None
+    report["independent_review_verified"] = bool(
+        isinstance(review_metadata, dict)
+        and all(isinstance(review_metadata.get(field), str) and review_metadata[field].strip()
+                for field in ("reviewer", "reviewed_at_utc", "method"))
+        and review_metadata.get("independent_from_candidate_author") is True
+    )
     report["release_eligible"] = bool(
-        split == "holdout" and rich and run and report["quality_gate_passed"]
+        split == "holdout" and labels.get("release_candidate") is True
+        and rich and run and report["quality_gate_passed"]
         and len(semantic_reviews) == len(rows) and len(citation_reviews) == len(rows)
+        and report["independent_review_verified"]
     )
     return report
 
