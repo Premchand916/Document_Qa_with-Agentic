@@ -534,7 +534,7 @@ def _run_chat_graph(req: ChatRequest, context: dict, history: list[dict], conver
         context["workspace_id"], context["principal_id"], req.query, snapshot.version
     )
     semantic_context = get_semantic_repository().recall(
-        context["workspace_id"], context["principal_id"]
+        context["workspace_id"], context["principal_id"], req.query,
     )
     can_run = req.use_web_search or snapshot.vectorstore is not None or bool(snapshot.tabular_assets)
     if not can_run:
@@ -772,6 +772,15 @@ async def list_semantic_memories(request: Request, limit: int = Query(50, ge=1, 
         context["workspace_id"], context["principal_id"], limit=limit,
     )
     return {"memories": memories}
+
+
+@app.get("/api/memories/semantic/export")
+async def export_semantic_memories(request: Request):
+    context = request.state.request_context
+    return await asyncio.to_thread(
+        get_semantic_repository().export,
+        context["workspace_id"], context["principal_id"],
+    )
 
 
 @app.delete("/api/memories/semantic/{memory_id}")

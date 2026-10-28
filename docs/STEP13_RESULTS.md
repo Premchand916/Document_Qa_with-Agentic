@@ -40,10 +40,10 @@ Verified 28 October 2026. Memory foundation now has explicit ownership and safet
 
 ## Remaining limits
 
-- Semantic recall currently loads bounded recent entries rather than ranking by task relevance. Add relevance only after a labeled memory-evaluation set exists.
+- Query-aware deterministic semantic ranking, export, audited episode review, cleanup tooling, and tablet access were added in [Step 14](STEP14_RESULTS.md).
 - No trusted reviewer/admin role exists for approving dynamic procedures. Therefore no writable procedural-memory API exists.
-- Episode verification still uses an internal repository boundary; reviewer UI and audit trail remain future work.
-- Startup-triggered expiry is adequate locally; production needs scheduled cleanup and deletion/export governance.
+- Episode verification remains an operator boundary; audit history now exists, but reviewer web roles/UI require trusted authorization.
+- A scheduled cleanup target now exists; production still must wire and monitor it.
 - Multi-host operation needs shared transactional storage instead of local SQLite.
 
 The deterministic memory foundation is complete. Fine-tuning stays paused for this workstream; the next memory evidence should be a separate real-model, label-blind evaluation of answer usefulness and evidence conflicts, not training on saved memory.

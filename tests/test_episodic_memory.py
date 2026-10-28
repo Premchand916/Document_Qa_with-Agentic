@@ -59,16 +59,43 @@ class EpisodicMemoryTests(OfflineCase):
         self.assertEqual(conversations.get("alpha", "alice", turn.conversation_id)
                          ["messages"][-1]["content"], "Original answer")
 
+    def test_operator_review_records_append_only_audit_history(self):
+        from memory.episodic_memory import EpisodeNotFound, EpisodicMemoryRepository
+        root = self.temp / "episodes"
+        _, turn = self.completed_turn(root)
+        episodes = EpisodicMemoryRepository(root)
+        saved = episodes.save_feedback(
+            "alpha", "alice", turn.conversation_id, "request-key", "Use 30.", now=200,
+        )
+        first = episodes.review(
+            "alpha", "alice", saved["episode_id"], "verified", "reviewer@example.com",
+            note="Checked cited total.", now=210,
+        )
+        second = episodes.review(
+            "alpha", "alice", saved["episode_id"], "rejected", "senior-reviewer@example.com",
+            note="Superseded after source correction.", now=220,
+        )
+        self.assertEqual(first["previous_status"], "unverified")
+        self.assertEqual(second["previous_status"], "verified")
+        history = episodes.list_reviews("alpha", "alice", saved["episode_id"])
+        self.assertEqual([item["decision"] for item in history], ["verified", "rejected"])
+        self.assertEqual(history[0]["reviewer_id"], "reviewer@example.com")
+        with self.assertRaises(EpisodeNotFound):
+            episodes.list_reviews("alpha", "bob", saved["episode_id"])
+
     def test_conversation_delete_cascades_linked_episodes(self):
-        from memory.episodic_memory import EpisodicMemoryRepository
+        from memory.episodic_memory import EpisodeNotFound, EpisodicMemoryRepository
         root = self.temp / "episodes"
         conversations, turn = self.completed_turn(root)
         episodes = EpisodicMemoryRepository(root)
-        episodes.save_feedback("alpha", "alice", turn.conversation_id, "request-key",
-                               "Delete with conversation", now=200)
+        saved = episodes.save_feedback("alpha", "alice", turn.conversation_id, "request-key",
+                                       "Delete with conversation", now=200)
+        episodes.review("alpha", "alice", saved["episode_id"], "verified", "reviewer", now=201)
         self.assertEqual(len(episodes.list_recent("alpha", "alice")), 1)
         conversations.delete("alpha", "alice", turn.conversation_id)
         self.assertEqual(episodes.list_recent("alpha", "alice"), [])
+        with self.assertRaises(EpisodeNotFound):
+            episodes.list_reviews("alpha", "alice", saved["episode_id"])
 
     def test_public_api_cannot_forge_verification_and_verified_feedback_guides_prompt_only(self):
         self.seed_workspace()

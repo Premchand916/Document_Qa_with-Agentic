@@ -1,6 +1,6 @@
 # RAG Architecture Implementation Plan
 
-**Status: Steps 0–13 have implemented local slices; the Step 13 deterministic memory foundation passes, 28 October 2026.** See the linked result document in each step. The full baseline passes 187 offline tests and all six stages; diagnostics show zero reproduced defects, 25 not reproduced, one passing rejection control, zero failed controls, and zero probe errors. Step 12 release evidence, shared identity-provider deployment, and production validation remain incomplete. This plan translates the [architecture audit](../ARCHITECTURE_REVIEW.md) into reviewable steps; confirmed failures and untested attack hypotheses remain separate.
+**Status: Steps 0–14 have implemented local slices; memory limitation hardening passes, 28 October 2026.** See the linked result document in each step. The full baseline passes 190 offline tests and all six stages; diagnostics show zero reproduced defects, 25 not reproduced, one passing rejection control, zero failed controls, and zero probe errors. Step 12 release evidence, shared identity-provider deployment, and production validation remain incomplete. This plan translates the [architecture audit](../ARCHITECTURE_REVIEW.md) into reviewable steps; confirmed failures and untested attack hypotheses remain separate.
 
 ## Outcome and architecture decisions
 
@@ -241,7 +241,15 @@ Retain Flat as the reference. Benchmark HNSW when vector-search latency dominate
 
 **Gate passed locally:** frozen deterministic checks prove cross-owner isolation, latest-value conflict handling, expiry, deletion, injection rejection, prompt evidence separation, and bounded local recall latency. Episodes still require verification and corpus match; procedures cannot be written through public memory APIs. Full baseline: 187 tests and all six stages pass.
 
-**Next:** run a separate label-blind real-model memory evaluation before changing recall ranking. Add relevance-ranked semantic recall only if it beats bounded deterministic recall. Keep Ollama fine-tuning paused until the user begins the separate fine-tuning phase.
+**Next:** run a separate label-blind real-model memory evaluation before changing the deterministic lexical ranker. Adopt embedding or learned ranking only if it beats this bounded baseline. Keep Ollama fine-tuning paused until the user begins the separate fine-tuning phase.
+
+## Step 14 — Memory limitation hardening
+
+**Implemented locally:** deterministic query-aware semantic ranking, owner-scoped JSON export, tablet Studio access, append-only episodic review audit, explicit operator review CLI, and a scheduler-compatible purge command. See [Step 14 results](STEP14_RESULTS.md).
+
+**Gate passed:** older relevant memory outranks newer unrelated memory; no-query recall remains recency-based; export remains owner/workspace scoped; public clients cannot verify episodes; review transitions retain reviewer history; cleanup covers all durable memory stores. Full baseline: 190 tests and all six stages pass.
+
+**Still blocked by architecture decisions:** trusted reviewer/admin web roles, multi-host transactional storage, deployment scheduler wiring, synonym-aware ranking evidence, and model-backed usefulness measurement.
 
 ## Expansion after the foundation
 
@@ -260,4 +268,4 @@ The requested general assistant is a separate product scope beyond document QA. 
 - **C — Steps 6–8:** durable conversations, observable retrieval/reranking, evidence-based answers. Demonstrate an end-to-end follow-up.
 - **D — Steps 9–11:** optional episodic recall, measured operations, migration/scale decisions. Demonstrate release evidence.
 
-**Next implementation action: run a label-blind real-model memory-quality evaluation or, when explicitly started, begin the separately governed Ollama fine-tuning phase. Fine-tuning remains paused now.** Exposed calibration and failed release-attempt sets are non-release evidence. Production rollout has not occurred. Multi-process load, multi-host storage, trusted review roles, identity-provider deployment, physical-device UI checks, multilingual OCR, cross-encoder deployment, and deployment-specific retention approval remain open.
+**Next implementation action: create and run a label-blind Ollama memory-quality evaluation without training, then decide whether failures belong to retrieval, memory ranking, prompting, or model behavior. Fine-tuning remains paused now.** Exposed calibration and failed release-attempt sets are non-release evidence. Production rollout has not occurred. Multi-process load, multi-host storage, trusted review roles, identity-provider deployment, physical-device UI checks, multilingual OCR, cross-encoder deployment, and deployment-specific retention approval remain open.

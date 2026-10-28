@@ -40,6 +40,23 @@ class SemanticMemoryTests(OfflineCase):
         with self.assertRaises(ValueError):
             SemanticMemoryRepository(self.temp / "invalid", retention_days=0)
 
+    def test_query_relevance_outranks_recency_without_hiding_global_memory(self):
+        from memory.semantic_memory import SemanticMemoryRepository
+        repository = SemanticMemoryRepository(self.temp / "semantic")
+        relevant = repository.upsert(
+            "alpha", "alice", "terminology", "Warranty period", "Coverage lasts 24 months", now=100,
+        )
+        for index in range(25):
+            repository.upsert(
+                "alpha", "alice", "preference", f"Formatting {index}", f"Preference {index}",
+                now=200 + index,
+            )
+        recalled = repository.recall("alpha", "alice", "What is the warranty coverage?", now=300)
+        self.assertEqual(recalled[0]["memory_id"], relevant["memory_id"])
+        self.assertGreater(recalled[0]["relevance_score"], 0)
+        self.assertEqual(len(recalled), repository.RECALL_LIMIT)
+        self.assertEqual(repository.recall("alpha", "alice", now=300)[0]["key"], "Formatting 24")
+
     def test_public_api_memory_guides_prompt_but_never_becomes_evidence(self):
         self.seed_workspace()
         invocations = []
@@ -61,6 +78,10 @@ class SemanticMemoryTests(OfflineCase):
         memory_id = saved.json()["memory_id"]
         listed = client.get("/api/memories/semantic").json()["memories"]
         self.assertEqual(listed[0]["memory_id"], memory_id)
+        exported = client.get("/api/memories/semantic/export")
+        self.assertEqual(exported.status_code, 200, exported.text)
+        self.assertEqual(exported.json()["kind"], "semantic_memory")
+        self.assertEqual(exported.json()["memories"][0]["memory_id"], memory_id)
 
         chat = client.post("/api/chat", json={"query": "Alpha?", "idempotency_key": "semantic-chat-key"})
         self.assertEqual(chat.status_code, 200, chat.text)
@@ -97,6 +118,10 @@ class SemanticMemoryTests(OfflineCase):
         self.assertIn("Semantic Memory", html)
         self.assertIn("addSemanticMemory()", html)
         self.assertIn("deleteSemanticMemory(memory.memory_id)", html)
+        self.assertIn("exportSemanticMemories()", html)
+        self.assertIn("studioOpen=!studioOpen", html)
+        self.assertIn(".panel-r.open{display:flex;position:fixed", html)
+        self.assertIn("aria-label=\"Close memory panel\"", html)
         self.assertIn("/api/memories/semantic", html)
         self.assertIn("Do not enter secrets or credentials", html)
 

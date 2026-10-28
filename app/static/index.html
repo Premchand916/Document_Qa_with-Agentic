@@ -273,6 +273,8 @@ body{display:flex;flex-direction:column;position:relative;z-index:1}
 .act-btn{width:100%;padding:9px;border-radius:var(--r2);border:1px solid var(--border);background:var(--surf2);color:var(--txt2);font-family:var(--f);font-size:13px;font-weight:500;cursor:pointer;transition:all .2s}
 .act-btn:hover{border-color:var(--border2);background:var(--surf3);color:var(--txt)}
 .act-danger:hover{border-color:rgba(239,68,68,.32);background:rgba(239,68,68,.07);color:#FCA5A5}
+.studio-toggle{display:none}
+.studio-close{display:none;background:none;border:1px solid var(--border);border-radius:var(--r2);color:var(--txt2);font:inherit;cursor:pointer;padding:3px 7px}
 
 /* ── Scrollbars ──────────────────────────────────────────────────────── */
 ::-webkit-scrollbar{width:5px;height:5px}
@@ -289,6 +291,9 @@ body{display:flex;flex-direction:column;position:relative;z-index:1}
 @media (max-width:1180px){
   .workspace{grid-template-columns:240px minmax(0,1fr)}
   .panel-r{display:none}
+  .studio-toggle{display:inline-flex}
+  .studio-close{display:inline-flex}
+  .panel-r.open{display:flex;position:fixed;z-index:300;right:0;top:56px;bottom:0;width:320px;background:var(--bg);box-shadow:-18px 0 40px rgba(0,0,0,.42)}
   .thread-select{max-width:130px}
 }
 
@@ -305,7 +310,9 @@ body{display:flex;flex-direction:column;position:relative;z-index:1}
   .panel{overflow:visible}
   .panel-c{order:1;min-height:calc(100vh - 52px)}
   .panel-l{order:2;border-right:0;border-top:1px solid var(--border)}
-  .panel-r{display:flex;order:3;border-left:0;border-top:1px solid var(--border)}
+  .panel-r,.panel-r.open{display:flex;position:static;width:auto;order:3;border-left:0;border-top:1px solid var(--border);box-shadow:none}
+  .studio-toggle{display:none}
+  .studio-close{display:none}
   .msgs{min-height:48vh;max-height:65vh}
   .bubble{max-width:96%}
   .p-grid{grid-template-columns:1fr}
@@ -483,6 +490,7 @@ body{display:flex;flex-direction:column;position:relative;z-index:1}
         <button class="thread-new" type="button" x-show="conversationNextBefore" :disabled="busy" @click="loadOlderConversation()">Older</button>
         <button class="thread-new thread-delete" type="button" x-show="conversationId" :disabled="busy" @click="deleteConversation()">Delete</button>
         <button class="thread-new" type="button" :disabled="busy" @click="newConversation()">New chat</button>
+        <button class="thread-new studio-toggle" type="button" :aria-expanded="studioOpen" aria-controls="studio-panel" @click="studioOpen=!studioOpen">Memory</button>
       </div>
     </div>
 
@@ -602,8 +610,8 @@ body{display:flex;flex-direction:column;position:relative;z-index:1}
   </main>
 
   <!-- ── RIGHT: Studio ──────────────────────────────────────────────────── -->
-  <aside class="panel panel-r">
-    <div class="p-head"><span class="p-label">STUDIO</span></div>
+  <aside id="studio-panel" class="panel panel-r" :class="{open:studioOpen}">
+    <div class="p-head"><span class="p-label">STUDIO</span><button class="studio-close" type="button" aria-label="Close memory panel" @click="studioOpen=false">Close</button></div>
 
     <div class="save-sec" x-show="lastRes&&lastRes.response">
       <button class="save-btn" @click="saveNote()">
@@ -624,6 +632,9 @@ body{display:flex;flex-direction:column;position:relative;z-index:1}
       </div>
       <button class="save-btn" type="button" :disabled="busy" @click="addSemanticMemory()">
         <span>＋</span><span>Remember preference or profile fact</span>
+      </button>
+      <button class="save-btn" type="button" :disabled="busy||!memories.length" @click="exportSemanticMemories()">
+        <span>⬇</span><span>Export semantic memory (.json)</span>
       </button>
       <div class="resp-meta" role="status" x-show="memoryStatus" x-text="memoryStatus"></div>
       <div class="n-list" x-show="memories.length">
@@ -693,7 +704,7 @@ function nexus() {
     questions: [],
     err: null,
     statusText: 'Upload files to begin', statusReady: false,
-    libOpen: false, selCat: '', cats: [], lib: {},
+    libOpen: false, studioOpen: false, selCat: '', cats: [], lib: {},
     cfg: { mode:'Auto', audience:'General', depth:'Balanced', web:false, provider:'gemini' },
 
     // ── Init ──────────────────────────────────────────────────────────────
@@ -1026,6 +1037,17 @@ function nexus() {
       if(!r.ok) { this.err=await this.apiError(r,'Could not delete semantic memory'); return; }
       await this.refreshSemanticMemories();
       this.memoryStatus='Memory deleted.';
+    },
+    async exportSemanticMemories(){
+      if(this.busy || !this.memories.length) return;
+      const r=await this.apiFetch('/api/memories/semantic/export');
+      if(!r.ok) { this.err=await this.apiError(r,'Could not export semantic memory'); return; }
+      const blob=new Blob([JSON.stringify(await r.json(),null,2)],{type:'application/json'});
+      const url=URL.createObjectURL(blob);
+      const a=Object.assign(document.createElement('a'),{href:url,download:'nexus_semantic_memory.json'});
+      a.click();
+      URL.revokeObjectURL(url);
+      this.memoryStatus='Memory export downloaded.';
     },
     delNote(i){ this.notes.splice(i,1); },
     exportNotes(){

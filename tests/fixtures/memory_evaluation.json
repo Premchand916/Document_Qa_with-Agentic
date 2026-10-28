@@ -4,6 +4,7 @@
   "required_checks": [
     "explicit_recall",
     "latest_value_wins",
+    "relevance_ranking",
     "owner_workspace_isolation",
     "expiry",
     "deletion",

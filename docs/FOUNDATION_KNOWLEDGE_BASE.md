@@ -230,3 +230,22 @@ Use this record for foundation changes: understand requirements, state invariant
 - Full baseline passed 187 tests; zero reproduced diagnostic defects; 25 defects not reproduced; one rejection control passed; zero failed controls or probe errors; ingestion, index, memory, and environment stages passed.
 - Local SQLite recall was 0.441 ms p95 across 100 iterations. This is development evidence, not a production SLO or model-quality measurement.
 - The deterministic memory foundation is complete. Fine-tuning remains paused; any next memory-quality run must be label-blind and model-backed.
+
+## Active work — Step 14 memory limitation hardening
+
+### Requirements
+
+- Improve semantic selection without adding model/network dependency or weakening hard prompt budgets.
+- Give users an owner-scoped semantic-memory export.
+- Make episodic review decisions auditable while keeping verification outside public user APIs.
+- Provide one bounded cleanup target for deployment schedulers.
+- Restore memory controls at tablet widths.
+
+### Result — 28 October 2026
+
+- Added deterministic query/key/value overlap ranking with recency fallback; 50 active entries are considered, at most 20 and 6,000 characters reach prompts.
+- Added semantic JSON export API/UI and tablet Studio toggle.
+- Added transactional, append-only episode review history plus local operator review CLI.
+- Added scheduler-compatible purge CLI covering working, episodic, and semantic memory.
+- Full baseline passed 190 tests; memory evaluation passed all nine checks with 0.454 ms p95 local recall.
+- Remaining decisions: reviewer/admin web authorization, multi-host database, external scheduler wiring, label-blind model usefulness evaluation, and any later fine-tuning.

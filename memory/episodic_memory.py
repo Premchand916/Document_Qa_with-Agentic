@@ -64,6 +64,18 @@ class EpisodicMemoryRepository:
                 CREATE INDEX IF NOT EXISTS episodes_recall
                     ON episodes(workspace_id,principal_id,task_key,validation_status,corpus_version,expires_at);
                 CREATE INDEX IF NOT EXISTS episodes_expiry ON episodes(expires_at);
+                CREATE TABLE IF NOT EXISTS episode_reviews (
+                    workspace_id TEXT NOT NULL, principal_id TEXT NOT NULL,
+                    episode_id TEXT NOT NULL, review_id TEXT NOT NULL,
+                    reviewer_id TEXT NOT NULL, previous_status TEXT NOT NULL,
+                    decision TEXT NOT NULL CHECK(decision IN ('verified','rejected')),
+                    review_note TEXT NOT NULL, reviewed_at INTEGER NOT NULL,
+                    PRIMARY KEY(workspace_id,principal_id,episode_id,review_id),
+                    FOREIGN KEY(workspace_id,principal_id,episode_id)
+                      REFERENCES episodes(workspace_id,principal_id,episode_id)
+                      ON DELETE CASCADE);
+                CREATE INDEX IF NOT EXISTS episode_review_history
+                    ON episode_reviews(workspace_id,principal_id,episode_id,reviewed_at);
             """)
             yield connection
         finally:
@@ -133,18 +145,60 @@ class EpisodicMemoryRepository:
         return {"episode_id": episode_id, "conversation_id": conversation_id,
                 "validation_status": "unverified", "expires_at": expires_at}
 
-    def set_status(self, workspace: str, principal: str, episode_id: str, status: str) -> None:
-        """Internal validation boundary; intentionally not exposed as a public API route."""
+    def review(self, workspace: str, principal: str, episode_id: str, status: str,
+               reviewer_id: str, *, note: str = "", now: int | None = None) -> dict:
+        """Operator validation boundary; intentionally not exposed as a public API route."""
         self._validate(workspace, principal, episode_id)
         if status not in {"verified", "rejected"}:
             raise ValueError("Episode status must be verified or rejected")
+        reviewer_id = reviewer_id.strip()
+        note = note.strip()
+        if not 1 <= len(reviewer_id) <= 256:
+            raise ValueError("Reviewer identifier must contain 1 to 256 characters")
+        if len(note) > 2000:
+            raise ValueError("Review note must contain at most 2000 characters")
+        reviewed_at = int(time.time() if now is None else now)
+        review_id = uuid4().hex
         with self._connect() as connection:
-            updated = connection.execute("""UPDATE episodes SET validation_status=?
+            connection.execute("BEGIN IMMEDIATE")
+            current = connection.execute("""SELECT validation_status FROM episodes
+                WHERE workspace_id=? AND principal_id=? AND episode_id=?""",
+                (workspace, principal, episode_id)).fetchone()
+            if current is None:
+                raise EpisodeNotFound()
+            previous_status = current["validation_status"]
+            connection.execute("""UPDATE episodes SET validation_status=?
                 WHERE workspace_id=? AND principal_id=? AND episode_id=?""",
                 (status, workspace, principal, episode_id))
+            connection.execute("""INSERT INTO episode_reviews(
+                workspace_id,principal_id,episode_id,review_id,reviewer_id,
+                previous_status,decision,review_note,reviewed_at)
+                VALUES (?,?,?,?,?,?,?,?,?)""",
+                (workspace, principal, episode_id, review_id, reviewer_id,
+                 previous_status, status, note, reviewed_at))
             connection.commit()
-            if updated.rowcount != 1:
+        return {"review_id": review_id, "episode_id": episode_id,
+                "reviewer_id": reviewer_id, "previous_status": previous_status,
+                "decision": status, "review_note": note, "reviewed_at": reviewed_at}
+
+    def set_status(self, workspace: str, principal: str, episode_id: str, status: str) -> None:
+        """Backward-compatible internal validation helper with an auditable operator identity."""
+        self.review(workspace, principal, episode_id, status, "internal-operator")
+
+    def list_reviews(self, workspace: str, principal: str, episode_id: str) -> list[dict]:
+        self._validate(workspace, principal, episode_id)
+        with self._connect() as connection:
+            exists = connection.execute("""SELECT 1 FROM episodes
+                WHERE workspace_id=? AND principal_id=? AND episode_id=?""",
+                (workspace, principal, episode_id)).fetchone()
+            if exists is None:
                 raise EpisodeNotFound()
+            rows = connection.execute("""SELECT review_id,reviewer_id,previous_status,
+                decision,review_note,reviewed_at FROM episode_reviews
+                WHERE workspace_id=? AND principal_id=? AND episode_id=?
+                ORDER BY reviewed_at ASC,review_id ASC""",
+                (workspace, principal, episode_id)).fetchall()
+        return [dict(row) for row in rows]
 
     def recall(self, workspace: str, principal: str, question: str,
                corpus_version: str | None, *, now: int | None = None, limit: int = 3) -> list[dict]:

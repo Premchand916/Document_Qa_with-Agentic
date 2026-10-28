@@ -27,7 +27,7 @@ def evaluate_memory(spec_path: Path = DEFAULT_SPEC) -> dict:
         raise ValueError("Unsupported memory evaluation schema_version")
     required = set(spec.get("required_checks", []))
     expected = {
-        "explicit_recall", "latest_value_wins", "owner_workspace_isolation", "expiry",
+        "explicit_recall", "latest_value_wins", "relevance_ranking", "owner_workspace_isolation", "expiry",
         "deletion", "injection_rejection", "non_evidentiary_prompt_boundary", "latency",
     }
     if required != expected:
@@ -58,6 +58,23 @@ def evaluate_memory(spec_path: Path = DEFAULT_SPEC) -> dict:
             and repository.recall("beta", "alice", now=1_003) == []
         )
         checks["expiry"] = repository.recall("alpha", "alice", now=replaced["expires_at"]) == []
+
+        ranking_repository = SemanticMemoryRepository(Path(folder) / "ranking", retention_days=1)
+        ranked_memory = ranking_repository.upsert(
+            "alpha", "alice", "terminology", "Warranty period", "Coverage lasts 24 months", now=1_000,
+        )
+        for index in range(20):
+            ranking_repository.upsert(
+                "alpha", "alice", "preference", f"Formatting {index}", f"Preference {index}",
+                now=1_100 + index,
+            )
+        ranked = ranking_repository.recall(
+            "alpha", "alice", "What is the warranty coverage?", now=1_200,
+        )
+        checks["relevance_ranking"] = bool(
+            ranked and ranked[0]["memory_id"] == ranked_memory["memory_id"]
+            and ranked[0]["relevance_score"] > 0
+        )
 
         prompt = build_prompted_query("Summarize the policy", {"semantic_context": current})
         checks["non_evidentiary_prompt_boundary"] = (

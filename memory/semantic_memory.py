@@ -11,6 +11,11 @@ from storage.workspaces import workspace_key
 
 
 SEMANTIC_CATEGORIES = frozenset({"preference", "profile", "constraint", "terminology"})
+_QUERY_STOPWORDS = frozenset({
+    "a", "an", "and", "are", "as", "at", "be", "by", "for", "from", "how", "i", "in",
+    "is", "it", "me", "my", "of", "on", "or", "please", "the", "this", "to", "what",
+    "when", "where", "which", "who", "why", "with", "you",
+})
 _FORBIDDEN_KEY = re.compile(
     r"\b(password|passcode|secret|api[ _-]?key|access[ _-]?token|private[ _-]?key|credential)\b",
     re.IGNORECASE,
@@ -51,6 +56,23 @@ def _validated_value(key: str, value: str) -> str:
     if _INSTRUCTION_OVERRIDE.search(normalized):
         raise SemanticMemoryRejected("Instruction overrides cannot be stored as semantic memory")
     return normalized
+
+
+def _query_terms(value: str | None) -> set[str]:
+    if not value:
+        return set()
+    return {
+        token for token in re.findall(r"[^\W_]+", value.casefold(), re.UNICODE)
+        if len(token) > 1 and token not in _QUERY_STOPWORDS
+    }
+
+
+def _relevance_score(row: sqlite3.Row, query_terms: set[str]) -> int:
+    if not query_terms:
+        return 0
+    key_terms = _query_terms(row["display_key"])
+    value_terms = _query_terms(row["memory_value"])
+    return 4 * len(query_terms & key_terms) + len(query_terms & value_terms)
 
 
 class SemanticMemoryRepository:
@@ -140,7 +162,8 @@ class SemanticMemoryRepository:
                 "value": memory_value, "source": "user_explicit", "created_at": created_at,
                 "updated_at": current_time, "expires_at": expires_at}
 
-    def recall(self, workspace: str, principal: str, *, now: int | None = None) -> list[dict]:
+    def recall(self, workspace: str, principal: str, query: str | None = None,
+               *, now: int | None = None) -> list[dict]:
         self._validate_owner(workspace, principal)
         current_time = int(time.time() if now is None else now)
         with self._connect() as connection:
@@ -148,9 +171,15 @@ class SemanticMemoryRepository:
                 created_at,updated_at,expires_at FROM semantic_memories
                 WHERE workspace_id=? AND principal_id=? AND expires_at>?
                 ORDER BY updated_at DESC,memory_id DESC LIMIT ?""",
-                (workspace, principal, current_time, self.RECALL_LIMIT)).fetchall()
+                (workspace, principal, current_time, self.MAX_ACTIVE)).fetchall()
+        query_terms = _query_terms(query)
+        ranked = sorted(
+            ((row, _relevance_score(row, query_terms)) for row in rows),
+            key=lambda item: (item[1], item[0]["updated_at"], item[0]["memory_id"]),
+            reverse=True,
+        )[:self.RECALL_LIMIT]
         result, characters = [], 0
-        for row in rows:
+        for row, score in ranked:
             size = len(row["display_key"]) + len(row["memory_value"])
             if characters + size > self.RECALL_CHARACTERS:
                 continue
@@ -158,7 +187,8 @@ class SemanticMemoryRepository:
             result.append({"memory_id": row["memory_id"], "category": row["category"],
                            "key": row["display_key"], "value": row["memory_value"],
                            "source": row["source"], "created_at": row["created_at"],
-                           "updated_at": row["updated_at"], "expires_at": row["expires_at"]})
+                           "updated_at": row["updated_at"], "expires_at": row["expires_at"],
+                           "relevance_score": score})
         return result
 
     def list_recent(self, workspace: str, principal: str, *, now: int | None = None,
@@ -178,6 +208,18 @@ class SemanticMemoryRepository:
                  "source": row["source"], "created_at": row["created_at"],
                  "updated_at": row["updated_at"], "expires_at": row["expires_at"]}
                 for row in rows]
+
+    def export(self, workspace: str, principal: str, *, now: int | None = None) -> dict:
+        current_time = int(time.time() if now is None else now)
+        return {
+            "schema_version": 1,
+            "kind": "semantic_memory",
+            "exported_at": current_time,
+            "workspace_id": workspace,
+            "memories": self.list_recent(
+                workspace, principal, now=current_time, limit=self.MAX_ACTIVE,
+            ),
+        }
 
     def delete(self, workspace: str, principal: str, memory_id: str) -> None:
         self._validate_owner(workspace, principal, memory_id)

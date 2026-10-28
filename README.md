@@ -28,6 +28,18 @@ Validate the memory foundation without a model call:
 python3 -m tools.evaluate_memory
 ```
 
+Run retention cleanup from a deployment scheduler:
+
+```bash
+python3 -m tools.purge_memories --data-dir vector_db
+```
+
+Review feedback through the local operator boundary:
+
+```bash
+python3 -m tools.review_episode --help
+```
+
 ---
 
 ## 🏗️ Architecture Overview
