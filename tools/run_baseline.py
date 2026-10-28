@@ -29,6 +29,7 @@ def main() -> int:
     commands = [
         ("tests", ["-m", "unittest", "discover", "-s", "tests", "-t", ".", "-v"]),
         ("diagnostics", ["-m", "tools.audit_failure_modes", "--output", str(folder / "diagnostics.json")]),
+        ("ingestion", ["-m", "tools.measure_ingestion", "--output", str(folder / "ingestion.json")]),
         ("environment", ["-m", "tools.baseline_environment", "--output-dir", str(folder)]),
     ]
     stages = []
@@ -48,6 +49,7 @@ def main() -> int:
         stages.append(stage)
         print(json.dumps(stage), flush=True)
     audit = json.loads((folder / "diagnostics.json").read_text()) if (folder / "diagnostics.json").exists() and stages[1]["exit_code"] == 0 else None
+    ingestion = json.loads((folder / "ingestion.json").read_text()) if (folder / "ingestion.json").exists() and stages[2]["exit_code"] == 0 else None
     diagnostic_gate = bool(audit) and audit["summary"] == {
         "reproduced": 0, "not_reproduced": 25, "control_passed": 1,
         "control_failed": 0, "probe_error": 0,
@@ -55,6 +57,7 @@ def main() -> int:
     report = {"generated_at_utc": datetime.now(timezone.utc).isoformat(), "stages": stages,
               "diagnostic_summary": audit["summary"] if audit else None,
               "diagnostic_gate_passed": diagnostic_gate,
+              "ingestion_measurement": ingestion,
               "fixture_sha256": {str(path.relative_to(ROOT)): hashlib.sha256(path.read_bytes()).hexdigest()
                                  for path in sorted((ROOT / "tests/fixtures").rglob("*")) if path.is_file()},
               "interpretation": "Offline foundation checks only. Any reproduced defect, failed control, or probe error fails this gate. No live model quality measured."}

@@ -28,6 +28,15 @@ class IsolatedIngestionTests(OfflineCase):
             parse_in_isolated_process("slow.txt", b"alpha", timeout=0.001)
         self.assertEqual(multiprocessing.active_children(), [])
 
+    def test_parent_rejects_input_over_parser_byte_limit_before_spawn(self):
+        import multiprocessing
+        from ingestion.file_loader import IngestionLimitError
+        import ingestion.isolated_parser as isolated
+        with patch.object(isolated, "MAX_PARSE_INPUT_BYTES", 3):
+            with self.assertRaises(IngestionLimitError):
+                isolated.parse_in_isolated_process("large.txt", b"four", timeout=1)
+        self.assertEqual(multiprocessing.active_children(), [])
+
     def test_api_timeout_preserves_previous_corpus(self):
         from ingestion.isolated_parser import ParserTimeoutError
         client = self.client()

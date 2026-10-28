@@ -42,6 +42,12 @@ MAX_ARCHIVE_ENTRIES = 500
 MAX_ARCHIVE_EXPANDED_BYTES = 100 * 1024 * 1024
 MAX_JSON_NODES = 5000
 MAX_JSON_DEPTH = 64
+MAX_IMAGE_PIXELS = 20_000_000
+MAX_IMAGE_FRAMES = 10
+MAX_OCR_CHARS = 1_000_000
+MAX_PDF_OCR_PAGES = 5
+PDF_OCR_RESOLUTION = 200
+OCR_PAGE_TIMEOUT = 4
 
 
 class IngestionLimitError(ValueError):
@@ -177,13 +183,60 @@ def _tabular_chunk_documents(dataframe, source_name, file_type, sheet_name="Data
     return documents
 
 
+def _tesseract_text(image) -> str:
+    import pytesseract
+
+    width, height = image.size
+    if width <= 0 or height <= 0 or width * height > MAX_IMAGE_PIXELS:
+        raise IngestionLimitError(f"Image exceeds {MAX_IMAGE_PIXELS} pixels")
+    text = pytesseract.image_to_string(image, config="--psm 6", timeout=OCR_PAGE_TIMEOUT)
+    if len(text) > MAX_OCR_CHARS:
+        raise IngestionLimitError(f"OCR output exceeds {MAX_OCR_CHARS} characters")
+    return text.strip()
+
+
+def _ocr_pdf_pages(raw: bytes, source_name: str, page_numbers: list[int]) -> tuple[list[Document], list[int]]:
+    documents = []
+    failed = []
+    try:
+        with pdfplumber.open(BytesIO(raw)) as pdf:
+            for page_number in page_numbers[:MAX_PDF_OCR_PAGES]:
+                page = pdf.pages[page_number - 1]
+                try:
+                    scaled_pixels = int(float(page.width) * PDF_OCR_RESOLUTION / 72) * int(float(page.height) * PDF_OCR_RESOLUTION / 72)
+                    if scaled_pixels > MAX_IMAGE_PIXELS:
+                        raise IngestionLimitError(f"Rendered PDF page exceeds {MAX_IMAGE_PIXELS} pixels")
+                    image = page.to_image(resolution=PDF_OCR_RESOLUTION).original
+                    text = _tesseract_text(image)
+                except IngestionLimitError:
+                    raise
+                except Exception:
+                    failed.append(page_number)
+                    continue
+                if not text:
+                    failed.append(page_number)
+                    continue
+                documents.append(Document(page_content=text, metadata={
+                    "source": source_name, "page": page_number, "file_type": "pdf",
+                    "content_type": "ocr_text", "ocr_engine": "tesseract",
+                    "coordinate_status": "raster_page", "ocr_resolution_dpi": PDF_OCR_RESOLUTION,
+                    "page_size": [float(page.width), float(page.height)],
+                }))
+    except IngestionLimitError:
+        raise
+    except Exception:
+        return [], list(page_numbers[:MAX_PDF_OCR_PAGES])
+    return documents, failed
+
+
 def load_pdf(file_obj, source_name, warnings=None, report=None):
     documents = []
     blank_pages = []
     coordinate_pages = []
     text_pages = 0
     line_count = 0
-    with pdfplumber.open(BytesIO(_to_bytes(file_obj))) as pdf:
+    raw = _to_bytes(file_obj)
+    with pdfplumber.open(BytesIO(raw)) as pdf:
         if len(pdf.pages) > MAX_PDF_PAGES:
             raise IngestionLimitError(f"PDF exceeds {MAX_PDF_PAGES} pages")
         if report is not None:
@@ -229,13 +282,19 @@ def load_pdf(file_obj, source_name, warnings=None, report=None):
                 )
             else:
                 blank_pages.append(page_num)
+    ocr_documents = []
+    if blank_pages:
+        ocr_documents, _ = _ocr_pdf_pages(raw, source_name, blank_pages)
+        documents.extend(ocr_documents)
+    ocr_pages = {int(document.metadata["page"]) for document in ocr_documents}
+    remaining_blank_pages = [page for page in blank_pages if page not in ocr_pages]
     if report is not None:
-        report.update(text_pages=text_pages, pages_without_text=blank_pages,
-                      pages_with_coordinates=coordinate_pages)
-    if blank_pages and documents and warnings is not None:
-        pages = ", ".join(str(page) for page in blank_pages[:20])
-        suffix = "…" if len(blank_pages) > 20 else ""
-        warnings.append(f"{source_name}: PDF page{'s' if len(blank_pages) != 1 else ''} {pages}{suffix} had no extractable text; OCR may be required.")
+        report.update(text_pages=text_pages + len(ocr_documents), pages_without_text=remaining_blank_pages,
+                      pages_with_coordinates=coordinate_pages, ocr_pages=sorted(ocr_pages))
+    if remaining_blank_pages and documents and warnings is not None:
+        pages = ", ".join(str(page) for page in remaining_blank_pages[:20])
+        suffix = "…" if len(remaining_blank_pages) > 20 else ""
+        warnings.append(f"{source_name}: PDF page{'s' if len(remaining_blank_pages) != 1 else ''} {pages}{suffix} had no extractable text; OCR may be required.")
     return documents
 
 
@@ -312,9 +371,9 @@ def load_text_document(file_obj, source_name, extension):
 def load_image_ocr(file_obj, source_name):
     """Extract text from an image via OCR.
 
-    Tries pytesseract first (requires system Tesseract install), then falls
-    back to Gemini Vision if GOOGLE_API_KEY is set. Raises ValueError when
-    neither engine is available.
+    Tries pytesseract first (requires system Tesseract install). Gemini Vision
+    requires both GOOGLE_API_KEY and explicit DOCQA_ALLOW_CLOUD_OCR=true.
+    Raises ValueError when no authorized engine produces text.
     """
     image_bytes = _to_bytes(file_obj)
     extension = Path(source_name).suffix.lower()
@@ -325,28 +384,38 @@ def load_image_ocr(file_obj, source_name):
         import pytesseract
 
         image = Image.open(BytesIO(image_bytes))
-        text = pytesseract.image_to_string(image, config="--psm 1")
-        if text.strip():
-            return [
-                Document(
-                    page_content=text.strip(),
-                    metadata={
-                        "source": source_name,
-                        "page": "1",
-                        "file_type": extension.lstrip("."),
-                        "content_type": "ocr_text",
-                        "ocr_engine": "tesseract",
-                    },
-                )
-            ]
+        frame_count = int(getattr(image, "n_frames", 1))
+        if frame_count > MAX_IMAGE_FRAMES:
+            raise IngestionLimitError(f"Image exceeds {MAX_IMAGE_FRAMES} frames")
+        documents = []
+        total_chars = 0
+        for frame in range(frame_count):
+            image.seek(frame)
+            if image.width <= 0 or image.height <= 0 or image.width * image.height > MAX_IMAGE_PIXELS:
+                raise IngestionLimitError(f"Image exceeds {MAX_IMAGE_PIXELS} pixels")
+            text = _tesseract_text(image.convert("RGB"))
+            total_chars += len(text)
+            if total_chars > MAX_OCR_CHARS:
+                raise IngestionLimitError(f"OCR output exceeds {MAX_OCR_CHARS} characters")
+            if text:
+                documents.append(Document(page_content=text, metadata={
+                    "source": source_name, "page": str(frame + 1),
+                    "file_type": extension.lstrip("."), "content_type": "ocr_text",
+                    "ocr_engine": "tesseract", "image_size": list(image.size),
+                }))
+        if documents:
+            return documents
     except ImportError:
         pass
+    except IngestionLimitError:
+        raise
     except Exception:
         pass
 
     # ── Gemini Vision fallback ────────────────────────────────────────────────
     api_key = os.getenv("GOOGLE_API_KEY", "")
-    if api_key:
+    cloud_ocr_enabled = os.getenv("DOCQA_ALLOW_CLOUD_OCR", "").strip().lower() in {"1", "true", "yes"}
+    if api_key and cloud_ocr_enabled:
         try:
             import base64
             import google.generativeai as genai
@@ -381,7 +450,8 @@ def load_image_ocr(file_obj, source_name):
 
     raise ValueError(
         f"Could not extract text from '{source_name}'. "
-        "Install Tesseract + pytesseract, or set GOOGLE_API_KEY for Gemini Vision OCR."
+        "Install Tesseract + pytesseract, or explicitly enable cloud OCR with "
+        "GOOGLE_API_KEY and DOCQA_ALLOW_CLOUD_OCR=true."
     )
 
 
@@ -435,7 +505,7 @@ def parse_uploaded_file(uploaded_file) -> ParsedFile:
     warnings = []
     report = {"source": source_name, "file_type": extension.lstrip("."), "text_extracted": True,
               "ocr_engine": None, "page_count": None, "text_pages": None,
-              "pages_without_text": [], "pages_with_coordinates": []}
+              "pages_without_text": [], "pages_with_coordinates": [], "ocr_pages": []}
 
     if extension == ".pdf":
         documents = load_pdf(file_obj, source_name, warnings, report)
@@ -472,6 +542,9 @@ def parse_uploaded_file(uploaded_file) -> ParsedFile:
         asset["source_id"] = source_id
     report["ocr_engine"] = next((doc.metadata["ocr_engine"] for doc in documents
                                   if "ocr_engine" in doc.metadata), None)
+    if extension in IMAGE_EXTENSIONS:
+        report.update(page_count=len(documents), text_pages=len(documents),
+                      ocr_pages=[int(doc.metadata["page"]) for doc in documents])
     return ParsedFile(documents, assets, warnings, report)
 
 

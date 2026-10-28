@@ -129,6 +129,24 @@ class ApiAndGraphTests(OfflineCase):
         self.assertEqual(upload.json()["extraction_reports"], [report])
         self.assertEqual(self.client().get("/api/state").json()["extraction_reports"], [report])
 
+    def test_scanned_pdf_ocr_publishes_searchable_corpus_and_report(self):
+        from io import BytesIO
+        from PIL import Image, ImageDraw
+        import ingestion.file_loader as loader
+        image = Image.new("RGB", (900, 260), "white")
+        ImageDraw.Draw(image).text((40, 100), "SCANNED POLICY", fill="black")
+        output = BytesIO()
+        image.save(output, format="PDF", resolution=150)
+        with patch.object(loader, "_tesseract_text", return_value="ALPHA OCR DEADLINE 30 DAYS"), \
+                patch.object(self.server, "generate_questions", return_value=[]):
+            upload = self.client().post("/api/upload", files={"files": ("scan.pdf", output.getvalue())})
+        self.assertEqual(upload.status_code, 200, upload.text)
+        self.assertEqual(upload.json()["extraction_reports"][0]["ocr_engine"], "tesseract")
+        self.assertEqual(upload.json()["extraction_reports"][0]["ocr_pages"], [1])
+        snapshot = self.server.get_repository().snapshot("local")
+        documents = list(snapshot.vectorstore.docstore._dict.values())
+        self.assertTrue(any("ALPHA OCR DEADLINE 30 DAYS" in doc.page_content for doc in documents))
+
     def test_startup_restores_existing_document_index(self):
         from langchain_core.documents import Document
         self.seed_workspace([Document(page_content="alpha", metadata={"source": "policy.txt"})])

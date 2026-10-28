@@ -17,7 +17,8 @@ This system enables users to upload documents (PDF, PPT, Excel, CSV, JSON, etc.)
 - 📊 Structured + unstructured document handling
 - 🧰 Tool-ready architecture (DataFrame computation ready)
 - 🎯 Clean answers with minimal hallucination
-- 📌 Source attribution (top relevant chunk only)
+- 📌 Versioned evidence IDs and validated citations
+- 🔎 Bounded local OCR for images and scanned PDFs
 
 ---
 
@@ -25,8 +26,6 @@ This system enables users to upload documents (PDF, PPT, Excel, CSV, JSON, etc.)
 
 ### 🔁 System Flow
 User Query
-   ↓
-Intent Classification (Agent)
    ↓
 Response Planner (Agent)
    ↓
@@ -39,7 +38,7 @@ QA Agent (LLM)
 Final Answer + Source
 🧩 High-Level Architecture
             ┌──────────────────────┐
-            │   Streamlit UI       │
+            │ FastAPI Browser UI   │
             └─────────┬────────────┘
                       ↓
             ┌──────────────────────┐
@@ -47,7 +46,7 @@ Final Answer + Source
             └─────────┬────────────┘
                       ↓
     ┌─────────────── Agents ────────────────┐
-    │ Intent → Planner → Retriever → QA     │
+    │ Response Plan → Route → Retrieve → QA │
     └───────────────────────────────────────┘
                       ↓
             ┌──────────────────────┐
@@ -94,11 +93,11 @@ Enables fast similarity search
 
 🤖 4. Agentic Workflow (LangGraph)
 Agent	Responsibility
-Intent Agent	Understand user query
-Planner Agent	Decide execution flow
+Response Planner	Choose bounded answer strategy
+Planner Agent	Select validated document/table route
 Retriever Agent	Fetch relevant chunks
 QA Agent	Generate grounded answer
-(Future) Tool Agent	Perform computations
+(Allowlisted) Table Tool	Perform validated calculations
 💡 5. Suggested Questions Engine
 
 Automatically generates meaningful questions
@@ -107,7 +106,7 @@ Helps users explore documents faster
 
 Click → auto-query execution
 
-🖥️ User Interface (Streamlit)
+🖥️ User Interface (FastAPI + browser)
 Features:
 
 📂 Multi-file upload
@@ -121,6 +120,8 @@ Features:
 📌 Source highlighting
 
 ⚙️ Installation
+
+```bash
 git clone https://github.com/<your-username>/<repo-name>.git
 cd <repo-name>
 
@@ -128,13 +129,23 @@ python -m venv venv
 venv\Scripts\activate   # Windows
 
 pip install -r requirements.txt
+
+# Required for local image/scanned-PDF OCR
+# macOS: brew install tesseract
+# Ubuntu/Debian: sudo apt-get install tesseract-ocr
+```
+
 🔑 Environment Setup
 
 Create a .env file:
 
+```dotenv
 GOOGLE_API_KEY=your_api_key
 HF_LOCAL_FILES_ONLY=true
 DOCQA_AUTH_MODE=local
+# Optional and explicit: permits image bytes to leave the machine for cloud OCR
+DOCQA_ALLOW_CLOUD_OCR=false
+```
 ▶️ Run the Application
 
 ```bash
@@ -151,7 +162,7 @@ Shared access requires a configured authentication proxy; see
 
 📄 Financial report analysis
 
-📊 CSV/Excel data understanding (future enhancement)
+📊 Validated CSV/Excel calculations
 
 📚 Research document summarization
 

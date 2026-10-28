@@ -13,6 +13,7 @@ from ingestion.file_loader import IngestionLimitError, OCRRequiredError, ParsedF
 DEFAULT_PARSE_TIMEOUT = 30.0
 MAX_RESULT_BYTES = 64 * 1024 * 1024
 MAX_WORKER_ADDRESS_SPACE = 2 * 1024 * 1024 * 1024
+MAX_PARSE_INPUT_BYTES = 10 * 1024 * 1024
 
 
 class ParserTimeoutError(Exception):
@@ -77,6 +78,8 @@ def _worker(connection, name: str, content: bytes):
 def parse_in_isolated_process(name: str, content: bytes, *, timeout: float = DEFAULT_PARSE_TIMEOUT) -> ParsedFile:
     if timeout <= 0:
         raise ValueError("Parser timeout must be positive")
+    if len(content) > MAX_PARSE_INPUT_BYTES:
+        raise IngestionLimitError(f"Parser input exceeds {MAX_PARSE_INPUT_BYTES} bytes")
     context = multiprocessing.get_context("spawn")
     parent, child = context.Pipe(duplex=False)
     process = context.Process(target=_worker, args=(child, name, content), daemon=True)
