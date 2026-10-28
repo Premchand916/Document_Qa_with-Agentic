@@ -41,6 +41,12 @@ Review feedback through the local operator boundary:
 python3 -m tools.review_episode --help
 ```
 
+Rehearse portable memory migration on a copy:
+
+```bash
+python3 -m tools.rehearse_memory_migration --help
+```
+
 ---
 
 ## 🏗️ Architecture Overview

@@ -1,6 +1,6 @@
 # RAG Architecture Implementation Plan
 
-**Status: Steps 0–15 have implemented local slices; trusted review authorization and label-blind ranking evidence pass, 28 October 2026.** See the linked result document in each step. The full baseline passes 194 offline tests and all seven stages; diagnostics show zero reproduced defects, 25 not reproduced, one passing rejection control, zero failed controls, and zero probe errors. Step 12 release evidence, identity-provider deployment, multi-host storage, and production validation remain incomplete. This plan translates the [architecture audit](../ARCHITECTURE_REVIEW.md) into reviewable steps; confirmed failures and untested attack hypotheses remain separate.
+**Status: Steps 0–16 have implemented local slices; portable memory migration contract passes, 28 October 2026.** See the linked result document in each step. The full baseline passes 196 offline tests and all seven stages; diagnostics show zero reproduced defects, 25 not reproduced, one passing rejection control, zero failed controls, and zero probe errors. Step 12 release evidence, identity-provider deployment, PostgreSQL runtime validation, and production rollout remain incomplete. This plan translates the [architecture audit](../ARCHITECTURE_REVIEW.md) into reviewable steps; confirmed failures and untested attack hypotheses remain separate.
 
 ## Outcome and architecture decisions
 
@@ -259,6 +259,14 @@ Retain Flat as the reference. Benchmark HNSW when vector-search latency dominate
 
 **Still external:** trusted identity-provider deployment. `auth_proxy` is the adapter boundary; production proxy must authenticate subjects and protect signed/internal headers.
 
+## Step 16 — Portable memory migration contract
+
+**Implemented locally:** versioned JSON contract, consistent completed-turn snapshot, relational and JSON validation, canonical checksum, private no-overwrite output, copy-only backup rehearsal, and source immutability proof. See [Step 16 results](STEP16_RESULTS.md).
+
+**Gate passed:** snapshot preserves all six memory tables and reviewer provenance; running writes block migration; tampering fails validation; copy/source checksums match; source remains unchanged. Full baseline: 196 tests and all seven stages pass.
+
+**Still external:** PostgreSQL adapter/importer, active-writer concurrency tests, staging database, encrypted backup storage, cutover, and rollback approval.
+
 ## Expansion after the foundation
 
 The requested general assistant is a separate product scope beyond document QA. Build observable capabilities and measure them; exact replication of a proprietary assistant's internals is not a verifiable requirement.
@@ -276,4 +284,4 @@ The requested general assistant is a separate product scope beyond document QA. 
 - **C — Steps 6–8:** durable conversations, observable retrieval/reranking, evidence-based answers. Demonstrate an end-to-end follow-up.
 - **D — Steps 9–11:** optional episodic recall, measured operations, migration/scale decisions. Demonstrate release evidence.
 
-**Next implementation action: design PostgreSQL repository contracts and migration evidence without switching runtime storage, or run a label-blind Ollama memory-quality evaluation without training. Fine-tuning remains paused now.** Exposed calibration and failed release-attempt sets are non-release evidence. Production rollout has not occurred. Multi-host storage, identity-provider deployment, physical-device UI checks, multilingual OCR, cross-encoder deployment, and deployment-specific retention approval remain open.
+**Next implementation action: build a PostgreSQL staging importer only when a test database is available, or proceed to label-blind Ollama memory-quality evaluation without training. Fine-tuning remains paused now.** Exposed calibration and failed release-attempt sets are non-release evidence. Production rollout has not occurred. Multi-host runtime storage, identity-provider deployment, physical-device UI checks, multilingual OCR, cross-encoder deployment, and deployment-specific retention approval remain open.

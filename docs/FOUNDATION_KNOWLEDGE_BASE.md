@@ -268,3 +268,20 @@ Use this record for foundation changes: understand requirements, state invariant
 - Added development-blind memory-retrieval tasks/labels and label-leakage rejection; Recall@1 reached 1.0.
 - Expanded semantic-memory rejection for secret assignments, credential-bearing URLs, and JWT-like tokens.
 - Full baseline passed 194 tests and seven stages. Fine-tuning remains paused.
+
+## Active work — Step 16 portable memory migration
+
+### Requirements
+
+- Define backend-neutral memory rows before implementing another database.
+- Reject inconsistent/running state and validate every relationship.
+- Make snapshots tamper-evident, private, and non-overwriting.
+- Rehearse only on a copy and prove source immutability.
+
+### Result — 28 October 2026
+
+- Added six-table versioned JSON contract with canonical SHA-256.
+- Added completed-turn, primary-key, conversation/turn/episode/review, status, and JSON validation.
+- Added private `0600` snapshot writer and copy-only SQLite backup rehearsal.
+- Full baseline passed 196 tests and seven stages.
+- PostgreSQL adapter/runtime switch remains blocked until a staging database and rollback policy exist.
