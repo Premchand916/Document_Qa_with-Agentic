@@ -33,6 +33,7 @@ class AgentState(TypedDict, total=False):
     vectorstore: Any                    # FAISS vectorstore instance
     use_web_search: bool                # If True, bypass docs and query DuckDuckGo
     chat_history: List[Dict[str, str]]  # Prior turns [{"role": ..., "content": ...}]
+    episodic_context: List[Dict[str, Any]]  # Verified prior outcomes; guidance only, never evidence
     provider: str
     corpus_version: Optional[str]
     request_context: Dict[str, Any]    # Server-authenticated identity, workspace and request ID

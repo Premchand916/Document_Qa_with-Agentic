@@ -1,23 +1,34 @@
-# Step 6 progress — durable conversations
+# Step 6 results — durable conversations
 
-27 October 2026. This is the first Step 6 slice, not the full acceptance gate.
+Verified 28 October 2026. Local acceptance gate passes for one or more API workers sharing the same SQLite file. Distributed or cross-region deployment is outside this gate.
 
 ## Implemented
 
-- SQLite owns conversation titles, completed turns, and idempotency keys under a server-authorized workspace and principal. The browser sends only the current question, conversation ID, and request key; supplied `chat_history` is ignored. Conversation list/detail endpoints reopen the transcript after reload or API restart.
-- Duplicate requests replay the stored answer, including when the response to a newly created conversation was lost. A conflicting in-flight turn returns 409. Startup marks turns interrupted by the previous single-worker process as failed so the same request key can retry.
-- The graph receives at most eight completed turns and 16,000 characters of recent context. Referential follow-ups append the prior user question to retrieval/web search. The prompt includes history even without a profile. The disconnected memory helper returns copies of nested messages.
-- Graph invocation and corpus snapshot loading run in a worker thread. Two requests may execute concurrently per API process; further requests receive 503 after one second waiting. The UI can create, reopen, and switch conversations, including between workspaces. Answers from a replaced corpus are marked stale.
+- SQLite remains the authoritative transcript under server-owned workspace and principal identity. Client-supplied history is validated but never trusted as memory. Completed idempotent requests replay their stored response.
+- Running turns use opaque 60-second leases. API heartbeat renews every 20 seconds. Only the live lease token may renew, complete, or fail a turn. Expired leases can be reclaimed; stale workers cannot overwrite or fail the replacement. Startup recovers expired leases only, so a second worker no longer invalidates active work.
+- Existing databases migrate additively with `lease_token` and `lease_expires_at`; saved conversations remain readable. SQLite WAL and a bounded busy timeout support shared local workers.
+- Conversation deletion is workspace/principal scoped and transactionally removes summaries, turns, and the conversation. UI requires explicit confirmation.
+- Default retention is 90 days and runs at startup. `DOCQA_CONVERSATION_RETENTION_DAYS` accepts 1–3650 days. Active running turns are excluded. `DOCQA_TURN_LEASE_SECONDS` accepts 10–3600 seconds.
+- Prompt memory keeps the latest eight completed turns and 16,000 characters. Older completed turns contribute through a deterministic extractive recap capped at 6,000 characters; original turns remain until deletion or retention cleanup.
+- Conversation detail returns at most 50 turns and supports a `before_sequence` cursor. UI loads older pages on demand.
+- Context-free references such as “What is its deadline?” return `needs_clarification` without retrieval or model execution. Valid follow-ups still expand retrieval from persisted user context.
+- Desktop preview verified conversation creation and permanent deletion. Tablet/mobile CSS now collapses the three-column layout into bounded two-column and stacked layouts.
 
 ## Verification
 
-- `python3 -m unittest discover -s tests -t . -q`: 110 offline tests pass.
-- `python3 -m tools.audit_failure_modes --output /private/tmp/docqa-conversations-diagnostics.json`: 6 reproduced limitations, 19 not reproduced, 1 control passed, 0 probe errors. M01, M04, and P02 no longer reproduce. M03 remains because the legacy `get_memory()` factory is still ephemeral; the active API uses SQLite.
-- Synthetic preview on `127.0.0.1:8772`: a saved answer reappeared after reload; New chat cleared it; switching from alpha to beta showed no alpha conversation. This used synthetic corpora/model output.
-- `python3 -m compileall -q app agents memory storage tests tools` and `git diff --check` pass.
+- `python3 -m unittest discover -s tests -t . -q`: **144 tests pass**.
+- Conversation tests cover additive migration, restart persistence, principal/workspace isolation, idempotent replay, live-lease conflict, renewal, expiry/reclaim, stale-token rejection, startup safety, recap construction, cursor pagination, deletion, retention, API deletion, and context-free clarification.
+- `python3 -m tools.audit_failure_modes`: zero reproduced defects, 25 not reproduced, one passing rejection control, zero probe errors.
+- Live synthetic browser preview: create conversation → Delete control appears → confirmation appears → deletion returns to empty state.
+- `python3 -m compileall`, `git diff --check`, ingestion/OCR measurement, embedding measurement, and environment inspection pass through the full baseline runner.
 
-## Remaining gate and limits
+## Remaining limits
 
-Graph state is transient because it currently includes FAISS and Pandas objects. SQLite is the authoritative transcript, not a LangGraph checkpoint. A future serializable graph state can use a durable checkpointer without creating a second transcript. The current process recovery assumes one API worker; a multi-worker deployment needs leased turns and a shared database. History is bounded for prompts but older turns have no summary or retention/deletion policy. Referential query expansion is conservative and does not clarify ambiguous references. The browser conversation list shows 20 recent threads, and detail reads all completed turns without pagination. Worker threads cannot forcibly cancel a model call; full job deadlines, streaming status, and load tests remain Step 10 work.
+- Shared workers must use the same local SQLite database. Network filesystems, multiple hosts, and cross-region leases require PostgreSQL or another transactional shared database plus database-time lease semantics.
+- Extractive recap is deterministic and auditable but not a semantic summary. Evaluate a local summarizer before replacing it.
+- LangGraph state still contains live FAISS/Pandas objects and remains request-scoped. SQLite owns transcript durability; adding a graph checkpointer now would create competing state ownership.
+- Worker threads cannot forcibly cancel native/model work. Durable jobs, hard deadlines, streaming status, stage metrics, and per-workspace fairness remain Step 10.
+- Retention default is implemented but still needs deployment-specific legal/product approval. Purging runs at startup, not continuously.
+- Responsive rules have automated contract coverage and desktop browser verification; physical-device/mobile-browser validation remains release work.
 
-Next: Step 7 provenance-preserving retrieval and visible reranker lifecycle, alongside Step 3 resource/OCR measurements. Complete Step 6 summarization, unresolved-reference handling, retention policy, and multi-worker semantics before claiming its full gate.
+Next: Step 9 opt-in episodic feedback with verified/unverified separation, expiry, authorization, and deletion propagation. Then Step 10 durable jobs and operational load gates.

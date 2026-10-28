@@ -139,7 +139,7 @@ Start with sum/mean/min/max/count and typed filters. Add grouping/joins only wit
 
 ## Step 6 — Durable conversation memory
 
-**First slice implemented:** server-owned SQLite transcripts, idempotent turns, reloadable UI, bounded context, conservative follow-up search expansion, and a two-slot offloaded graph call. M01/M04/P02 no longer reproduce. The active API is durable, while the legacy memory factory remains ephemeral (M03). This is a single-worker design; summarization, retention/deletion, unresolved-reference clarification, durable graph checkpoints, and multi-worker leases remain open. See [Step 6 progress](STEP6_RESULTS.md).
+**Local acceptance cases pass:** server-owned SQLite transcripts, idempotent replay, expiring turn leases with heartbeat, stale-worker rejection, migration-safe shared-worker startup, scoped deletion, 90-day configurable retention, bounded extractive recap, cursor pagination, unresolved-reference clarification, reloadable UI, and responsive conversation controls are implemented. SQLite remains the sole transcript authority; graph objects stay request-scoped. Multi-host databases, semantic summarization, durable jobs, and hard model cancellation remain later gates. See [Step 6 results](STEP6_RESULTS.md).
 
 **Covers:** M01–M04; reload loss, forged history, duplicate turns, ambiguous follow-ups.
 
@@ -189,7 +189,7 @@ Check citation existence, source version, and exact tool-result preservation. Se
 
 ## Step 9 — Selective episodic memory
 
-**Depends on:** steps 2, 6, and 8. This is a new capability; episodic memory is currently absent.
+**Local deterministic gate passes:** opt-in server-derived corrections, non-forgeable unverified/verified separation, owner/workspace/task/corpus/expiry-scoped recall, non-evidentiary prompt guidance, owner list/delete APIs, and conversation-delete cascade are implemented. Exact task matching is deliberate; reviewer workflow, similarity recall, and post-reindex revalidation remain open. See [Step 9 results](STEP9_RESULTS.md).
 
 **Implement:** save selected analyses/corrections with workspace, task, tool plan, evidence versions, result, validation status, timestamp, and expiry. Separate unvalidated feedback from verified outcomes. Recall only authorized relevant episodes after freshness checks. Version corrections explicitly.
 
@@ -236,4 +236,4 @@ The requested general assistant is a separate product scope beyond document QA. 
 - **C — Steps 6–8:** durable conversations, observable retrieval/reranking, evidence-based answers. Demonstrate an end-to-end follow-up.
 - **D — Steps 9–11:** optional episodic recall, measured operations, migration/scale decisions. Demonstrate release evidence.
 
-**Next implementation action: complete Step 6 retention/deletion and shared-worker turn leases, then start Step 9 opt-in episodic feedback.** Step 3 now completes checkpoint B's local deterministic and resource gate. Step 8 completes checkpoint C's local evidence path, while durable graph checkpoints and shared-worker semantics remain open. Production rollout has not occurred. Identity-provider deployment, mobile layout, multilingual OCR, held-out model quality, and storage-retention policy approval remain open. Passing checks do not establish production readiness.
+**Next implementation action: Step 10 durable jobs and operational load gates.** Steps 3, 6, and 9 now complete their local deterministic resource, shared-SQLite conversation, and selective-feedback gates. Step 8 completes checkpoint C's local evidence path. Production rollout has not occurred. Multi-host storage, trusted feedback-review roles, identity-provider deployment, physical-device UI checks, multilingual OCR, held-out model quality, and deployment-specific retention approval remain open. Passing checks do not establish production readiness.

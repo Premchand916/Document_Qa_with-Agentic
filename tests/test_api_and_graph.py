@@ -6,6 +6,15 @@ from tests.support import FIXTURES, OfflineCase, text_pdf
 
 
 class ApiAndGraphTests(OfflineCase):
+    def test_conversation_ui_exposes_delete_pagination_and_mobile_layout(self):
+        from app.server import STATIC_DIR
+        html = (STATIC_DIR / "index.html").read_text()
+        self.assertIn("deleteConversation()", html)
+        self.assertIn("loadOlderConversation()", html)
+        self.assertIn("submitCorrection()", html)
+        self.assertIn("@media (max-width:760px)", html)
+        self.assertIn("Delete this conversation permanently?", html)
+
     def test_chat_before_startup_returns_service_unavailable(self):
         self.assertEqual(self.client().post("/api/chat", json={"query": "alpha"}).status_code, 503)
 

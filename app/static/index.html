@@ -79,6 +79,7 @@ body{display:flex;flex-direction:column;position:relative;z-index:1}
 .thread-select,.thread-new{border:1px solid var(--border);border-radius:var(--r2);background:var(--surf2);color:var(--txt2);font:inherit;font-size:11px;padding:5px 7px}
 .thread-select{max-width:160px;min-width:0}
 .thread-new{cursor:pointer;white-space:nowrap}
+.thread-delete{color:#ff8f9b;border-color:rgba(255,95,109,.3)}
 .thread-new:disabled,.thread-select:disabled{opacity:.5;cursor:not-allowed}
 
 /* ── Upload area ─────────────────────────────────────────────────────── */
@@ -282,6 +283,41 @@ body{display:flex;flex-direction:column;position:relative;z-index:1}
   content:'';position:absolute;inset:0;pointer-events:none;z-index:200;
   background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,.012) 2px,rgba(0,0,0,.012) 4px);
 }
+
+@media (max-width:1180px){
+  .workspace{grid-template-columns:240px minmax(0,1fr)}
+  .panel-r{display:none}
+  .thread-select{max-width:130px}
+}
+
+@media (max-width:760px){
+  html,body{height:auto;min-height:100%;overflow:auto}
+  body{display:block}
+  .topbar{height:52px;padding:0 12px;position:sticky;top:0}
+  .logo-name{font-size:11px;letter-spacing:.12em}
+  .topbar-right{gap:5px}
+  .topbar-right .pill{padding:4px 8px;font-size:10px}
+  .topbar-right .pill:nth-child(n+2){display:none}
+  .workspace{display:flex;flex-direction:column;overflow:visible;min-height:calc(100vh - 52px)}
+  .workspace::before{display:none}
+  .panel{overflow:visible}
+  .panel-c{order:1;min-height:calc(100vh - 52px)}
+  .panel-l{order:2;border-right:0;border-top:1px solid var(--border)}
+  .panel-r{display:flex;order:3;border-left:0;border-top:1px solid var(--border)}
+  .msgs{min-height:48vh;max-height:65vh}
+  .bubble{max-width:96%}
+  .p-grid{grid-template-columns:1fr}
+  .thread-controls{flex-wrap:wrap;justify-content:flex-end}
+  .thread-select{max-width:150px}
+}
+
+@media (max-width:480px){
+  .panel-c>.p-head{align-items:flex-start;flex-direction:column;gap:7px}
+  .thread-controls{width:100%;justify-content:flex-start}
+  .thread-select{flex:1;max-width:none}
+  .msgs{padding:12px}
+  .inp-area{padding:10px}
+}
 </style>
 </head>
 
@@ -441,6 +477,8 @@ body{display:flex;flex-direction:column;position:relative;z-index:1}
             <option :value="thread.conversation_id" x-text="thread.title"></option>
           </template>
         </select>
+        <button class="thread-new" type="button" x-show="conversationNextBefore" :disabled="busy" @click="loadOlderConversation()">Older</button>
+        <button class="thread-new thread-delete" type="button" x-show="conversationId" :disabled="busy" @click="deleteConversation()">Delete</button>
         <button class="thread-new" type="button" :disabled="busy" @click="newConversation()">New chat</button>
       </div>
     </div>
@@ -568,6 +606,10 @@ body{display:flex;flex-direction:column;position:relative;z-index:1}
       <button class="save-btn" @click="saveNote()">
         <span>📌</span><span>Save last response as note</span>
       </button>
+      <button class="save-btn" @click="submitCorrection()">
+        <span>✓</span><span>Submit correction for review</span>
+      </button>
+      <div class="resp-meta" role="status" x-show="feedbackStatus" x-text="feedbackStatus"></div>
     </div>
 
     <div class="div"></div>
@@ -617,9 +659,9 @@ function nexus() {
     // ── State ─────────────────────────────────────────────────────────────
     workspaceId: "", workspaces: [], canSelectWorkspace: false, switching: true, providerChanging: false,
     files: [], dragging: false, indexing: false, uploadWarnings: [],
-    chatHistory: [], conversations: [], conversationId: '', pendingSubmission: null, corpusVersion: null, txt: '', loading: false,
+    chatHistory: [], conversations: [], conversationId: '', conversationNextBefore: null, pendingSubmission: null, corpusVersion: null, txt: '', loading: false,
     srcKey: null,
-    notes: [], lastRes: null,
+    notes: [], lastRes: null, feedbackStatus: '',
     questions: [],
     err: null,
     statusText: 'Upload files to begin', statusReady: false,
@@ -685,9 +727,15 @@ function nexus() {
       if(!r.ok) { this.err=await this.apiError(r, 'Could not open conversation'); return; }
       const data=await r.json();
       this.conversationId=data.conversation_id;
+      this.conversationNextBefore=data.next_before_sequence||null;
       this.pendingSubmission=null;
+      this.chatHistory=this.conversationMessages(data.messages||[]);
+      this.lastRes=null; this.feedbackStatus=''; this.srcKey=null;
+      this.$nextTick(()=>this.scrollDown());
+    },
+    conversationMessages(messages) {
       let question='';
-      this.chatHistory=(data.messages||[]).map(m=>{
+      return messages.map(m=>{
         if(m.role==='user') { question=m.content; return {role:'user',content:m.content}; }
         const response=m.response||{};
         return {role:'assistant',content:m.content,q:question,cards:this.mkCards(response.documents||[]),
@@ -695,17 +743,32 @@ function nexus() {
                 citations:response.citations||[],evidenceStatus:response.evidence_status||null,corpusVersion:response.corpus_version,
                 stale:!!response.corpus_version&&!!this.corpusVersion&&response.corpus_version!==this.corpusVersion};
       });
-      this.lastRes=null; this.srcKey=null;
-      this.$nextTick(()=>this.scrollDown());
+    },
+    async loadOlderConversation() {
+      if(!this.conversationId || !this.conversationNextBefore || this.busy) return;
+      const url='/api/conversations/'+encodeURIComponent(this.conversationId)+'?before_sequence='+encodeURIComponent(this.conversationNextBefore);
+      const r=await this.apiFetch(url);
+      if(!r.ok) { this.err=await this.apiError(r, 'Could not load older messages'); return; }
+      const data=await r.json();
+      this.chatHistory=[...this.conversationMessages(data.messages||[]),...this.chatHistory];
+      this.conversationNextBefore=data.next_before_sequence||null;
+    },
+    async deleteConversation() {
+      if(!this.conversationId || this.busy || !globalThis.confirm('Delete this conversation permanently?')) return;
+      const id=this.conversationId;
+      const r=await this.apiFetch('/api/conversations/'+encodeURIComponent(id),{method:'DELETE'});
+      if(!r.ok) { this.err=await this.apiError(r, 'Could not delete conversation'); return; }
+      this.newConversation();
+      await this.refreshConversations();
     },
     newConversation() {
-      this.conversationId=''; this.pendingSubmission=null; this.chatHistory=[]; this.lastRes=null; this.srcKey=null; this.err=null;
+      this.conversationId=''; this.conversationNextBefore=null; this.pendingSubmission=null; this.chatHistory=[]; this.lastRes=null; this.feedbackStatus=''; this.srcKey=null; this.err=null;
     },
     async switchWorkspace(workspace) {
       if (this.busy || workspace === this.workspaceId || !this.workspaces.includes(workspace)) return;
       this.switching=true;
       this.workspaceId=workspace;
-      this.chatHistory=[]; this.conversationId=''; this.pendingSubmission=null; this.conversations=[]; this.notes=[]; this.lastRes=null; this.srcKey=null;
+      this.chatHistory=[]; this.conversationId=''; this.conversationNextBefore=null; this.pendingSubmission=null; this.conversations=[]; this.notes=[]; this.lastRes=null; this.feedbackStatus=''; this.srcKey=null;
       this.txt=''; this.files=[]; this.questions=[]; this.err=null; this.uploadWarnings=[];
       this.statusReady=false; this.statusText='Loading workspace';
       try { await this.loadWorkspace(); }
@@ -744,7 +807,7 @@ function nexus() {
         this.statusReady=true; this.statusText='Knowledge base ready';
         this.corpusVersion=d.corpus_version;
         for(const m of this.chatHistory) if(m.role==='assistant'&&m.corpusVersion&&m.corpusVersion!==this.corpusVersion) m.stale=true;
-        this.lastRes=null; this.srcKey=null;
+        this.lastRes=null; this.feedbackStatus=''; this.srcKey=null;
       } catch(e){ this.err=e.message; }
       finally{ this.indexing=false; }
     },
@@ -752,7 +815,7 @@ function nexus() {
     // ── Chat ──────────────────────────────────────────────────────────────
     async send(q) {
       if(!q?.trim()||this.busy) return;
-      this.txt=''; this.err=null;
+      this.txt=''; this.err=null; this.feedbackStatus='';
       const el=document.getElementById('inp'); if(el){el.style.height='auto';}
 
       if(!this.statusReady && !this.cfg.web) {
@@ -856,6 +919,17 @@ function nexus() {
         src: this.lastRes.source||'AI Response',
         ts: new Date().toLocaleString('en-US',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}),
       });
+    },
+    async submitCorrection(){
+      if(!this.lastRes?.idempotency_key || !this.conversationId || this.busy) return;
+      const correction=globalThis.prompt('Describe the corrected outcome. It will remain unverified until reviewed.');
+      if(!correction?.trim()) return;
+      this.feedbackStatus='';
+      const r=await this.apiFetch('/api/episodes',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
+        conversation_id:this.conversationId,idempotency_key:this.lastRes.idempotency_key,correction:correction.trim(),
+      })});
+      if(!r.ok) { this.err=await this.apiError(r, 'Could not save correction'); return; }
+      this.feedbackStatus='Correction saved as unverified feedback.';
     },
     delNote(i){ this.notes.splice(i,1); },
     exportNotes(){

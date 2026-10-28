@@ -45,3 +45,11 @@ class ChatRequest(BaseModel):
 class ProviderRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     provider: Literal["gemini", "ollama"]
+
+
+class EpisodeFeedbackRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    conversation_id: Annotated[str, StringConstraints(strict=True, pattern=r"^[a-f0-9]{32}$")]
+    idempotency_key: Annotated[str, StringConstraints(strict=True, min_length=8, max_length=128)]
+    correction: Annotated[str, StringConstraints(strict=True, strip_whitespace=True,
+                                                  min_length=1, max_length=4000)]

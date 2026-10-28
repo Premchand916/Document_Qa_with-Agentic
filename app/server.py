@@ -1,5 +1,6 @@
 """FastAPI entry point — replaces the Streamlit main.py."""
 import asyncio
+from contextlib import suppress
 import hashlib
 import os
 import sys
@@ -14,7 +15,7 @@ from typing import Any, Dict, List
 
 import uvicorn
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -26,14 +27,15 @@ load_dotenv(ROOT_DIR / ".env")
 from agents.orchestrator_agent import get_active_provider, LLMConfigurationError, OllamaModelMemoryError
 from agents.question_generator import generate_questions
 from app.prompt_library import PROMPT_LIBRARY, get_prompt_categories
-from app.schemas import ChatRequest, ProviderRequest
+from app.schemas import ChatRequest, EpisodeFeedbackRequest, ProviderRequest
 from app.security import BoundaryMiddleware, MAX_FILE_BYTES, MAX_FILES, error_response
 from ingestion.file_loader import (IngestionLimitError, OCRConfigurationError, OCRRequiredError,
                                    parse_uploaded_file)
 from ingestion.isolated_parser import ParserTimeoutError, ParserUnavailableError, parse_in_isolated_process
 from ingestion.semantic_chunker import semantic_chunk_documents
 from langgraph_flow.graph_builder import build_graph
-from memory.followups import resolve_followup_query
+from memory.followups import needs_reference_clarification, resolve_followup_query
+from memory.episodic_memory import EpisodeConflict, EpisodeNotFound, EpisodicMemoryRepository
 from utils.prompt_skill import build_prompted_query
 from vector_Store import faiss_store
 from vector_Store.faiss_store import build_vector_store
@@ -70,7 +72,33 @@ def get_repository() -> WorkspaceRepository:
 
 
 def get_conversation_repository() -> ConversationRepository:
-    return ConversationRepository(Path(os.getenv("DOCQA_DATA_DIR") or faiss_store.DB_PATH))
+    def configured_integer(name: str, default: int, minimum: int, maximum: int) -> int:
+        raw_value = os.getenv(name, str(default)).strip()
+        try:
+            value = int(raw_value)
+        except ValueError as exc:
+            raise RuntimeError(f"{name} must be an integer") from exc
+        if not minimum <= value <= maximum:
+            raise RuntimeError(f"{name} must be between {minimum} and {maximum}")
+        return value
+
+    return ConversationRepository(
+        Path(os.getenv("DOCQA_DATA_DIR") or faiss_store.DB_PATH),
+        lease_seconds=configured_integer("DOCQA_TURN_LEASE_SECONDS", 60, 10, 3600),
+        retention_days=configured_integer("DOCQA_CONVERSATION_RETENTION_DAYS", 90, 1, 3650),
+    )
+
+
+def get_episodic_repository() -> EpisodicMemoryRepository:
+    raw_value = os.getenv("DOCQA_EPISODE_RETENTION_DAYS", "180").strip()
+    try:
+        retention_days = int(raw_value)
+    except ValueError as exc:
+        raise RuntimeError("DOCQA_EPISODE_RETENTION_DAYS must be an integer") from exc
+    return EpisodicMemoryRepository(
+        Path(os.getenv("DOCQA_DATA_DIR") or faiss_store.DB_PATH),
+        retention_days=retention_days,
+    )
 
 
 @app.exception_handler(PublicationConflict)
@@ -93,6 +121,16 @@ async def conversation_conflict(request: Request, exc: ConversationConflict):
     return error_response(409, "conversation_conflict", "Conversation changed or already has a running turn.", request.state.request_id)
 
 
+@app.exception_handler(EpisodeNotFound)
+async def episode_not_found(request: Request, exc: EpisodeNotFound):
+    return error_response(404, "episode_not_found", "Saved feedback was not found.", request.state.request_id)
+
+
+@app.exception_handler(EpisodeConflict)
+async def episode_conflict(request: Request, exc: EpisodeConflict):
+    return error_response(409, "episode_conflict", "Feedback already exists for this completed turn.", request.state.request_id)
+
+
 _graph = None
 _PARSE_SLOTS = asyncio.Semaphore(2)
 _CHAT_SLOTS = asyncio.Semaphore(2)
@@ -101,7 +139,10 @@ _CHAT_SLOTS = asyncio.Semaphore(2)
 @app.on_event("startup")
 async def _startup():
     global _graph
-    await asyncio.to_thread(get_conversation_repository().recover_interrupted)
+    repository = get_conversation_repository()
+    await asyncio.to_thread(repository.recover_expired)
+    await asyncio.to_thread(repository.purge_expired)
+    await asyncio.to_thread(get_episodic_repository().purge_expired)
     _graph = build_graph()
 
 
@@ -221,6 +262,26 @@ async def upload_files(request: Request):
 def _run_chat_graph(req: ChatRequest, context: dict, history: list[dict], conversation_id: str,
                     idempotency_key: str) -> dict:
     snapshot = get_repository().snapshot(context["workspace_id"])
+    if needs_reference_clarification(req.query, history):
+        return {
+            "conversation_id": conversation_id,
+            "idempotency_key": idempotency_key,
+            "workspace_id": snapshot.workspace_id,
+            "corpus_version": snapshot.version,
+            "response": "Please name the document, policy, or subject you mean so I can retrieve the correct evidence.",
+            "source": "",
+            "sources": [],
+            "documents": [],
+            "retrieval_status": {"status": "not_run", "reason": "unresolved_reference"},
+            "citations": [],
+            "evidence_status": {"status": "not_evaluated"},
+            "response_plan": {},
+            "result_status": "needs_clarification",
+            "tool_result": None,
+        }
+    episodic_context = get_episodic_repository().recall(
+        context["workspace_id"], context["principal_id"], req.query, snapshot.version
+    )
     can_run = req.use_web_search or snapshot.vectorstore is not None or bool(snapshot.tabular_assets)
     if not can_run:
         raise HTTPException(
@@ -239,6 +300,7 @@ def _run_chat_graph(req: ChatRequest, context: dict, history: list[dict], conver
             "uploaded_file_types": snapshot.file_types,
             "tabular_assets": snapshot.tabular_assets,
             "use_web_search": req.use_web_search,
+            "episodic_context": episodic_context,
         },
     )
 
@@ -259,6 +321,7 @@ def _run_chat_graph(req: ChatRequest, context: dict, history: list[dict], conver
         "uploaded_file_types": snapshot.file_types,
         "tabular_assets": snapshot.tabular_assets,
         "use_web_search": req.use_web_search,
+        "episodic_context": episodic_context,
     }
 
     try:
@@ -305,6 +368,20 @@ async def _run_bounded_chat(req: ChatRequest, context: dict, history: list[dict]
         _CHAT_SLOTS.release()
 
 
+async def _maintain_turn_lease(repository: ConversationRepository, context: dict,
+                               conversation_id: str, idempotency_key: str,
+                               lease_token: str, lease_lost: asyncio.Event) -> None:
+    interval = max(1, repository.lease_seconds // 3)
+    while True:
+        await asyncio.sleep(interval)
+        try:
+            await asyncio.to_thread(repository.renew, context["workspace_id"], context["principal_id"],
+                                    conversation_id, idempotency_key, lease_token)
+        except Exception:
+            lease_lost.set()
+            return
+
+
 @app.post("/api/chat")
 async def chat(req: ChatRequest, request: Request):
     if _graph is None:
@@ -317,16 +394,29 @@ async def chat(req: ChatRequest, request: Request):
                                        idempotency_key, req.query)
     if reserved.cached_response is not None:
         return reserved.cached_response
+    if reserved.lease_token is None:
+        raise ConversationConflict()
+    lease_lost = asyncio.Event()
+    heartbeat = asyncio.create_task(_maintain_turn_lease(
+        repository, context, reserved.conversation_id, idempotency_key,
+        reserved.lease_token, lease_lost
+    ))
     try:
         response = await _run_bounded_chat(req, context, reserved.history,
                                            reserved.conversation_id, idempotency_key)
+        if lease_lost.is_set():
+            raise ConversationConflict()
         await asyncio.to_thread(repository.complete, context["workspace_id"], context["principal_id"],
-                                reserved.conversation_id, idempotency_key, response)
+                                reserved.conversation_id, idempotency_key, reserved.lease_token, response)
         return response
     except BaseException:
         await asyncio.to_thread(repository.fail, context["workspace_id"], context["principal_id"],
-                                reserved.conversation_id, idempotency_key)
+                                reserved.conversation_id, idempotency_key, reserved.lease_token)
         raise
+    finally:
+        heartbeat.cancel()
+        with suppress(asyncio.CancelledError):
+            await heartbeat
 
 
 @app.get("/api/conversations")
@@ -338,10 +428,51 @@ async def list_conversations(request: Request):
 
 
 @app.get("/api/conversations/{conversation_id}")
-async def get_conversation(conversation_id: str, request: Request):
+async def get_conversation(conversation_id: str, request: Request,
+                           limit: int = Query(50, ge=1, le=100),
+                           before_sequence: int | None = Query(None, ge=1)):
     context = request.state.request_context
     return await asyncio.to_thread(get_conversation_repository().get,
-                                   context["workspace_id"], context["principal_id"], conversation_id)
+                                   context["workspace_id"], context["principal_id"], conversation_id,
+                                   limit=limit, before_sequence=before_sequence)
+
+
+@app.delete("/api/conversations/{conversation_id}")
+async def delete_conversation(conversation_id: str, request: Request):
+    context = request.state.request_context
+    await asyncio.to_thread(get_conversation_repository().delete,
+                            context["workspace_id"], context["principal_id"], conversation_id)
+    return {"deleted": True, "conversation_id": conversation_id}
+
+
+@app.post("/api/episodes")
+async def save_episode(req: EpisodeFeedbackRequest, request: Request):
+    context = request.state.request_context
+    return await asyncio.to_thread(
+        get_episodic_repository().save_feedback,
+        context["workspace_id"], context["principal_id"], req.conversation_id,
+        req.idempotency_key, req.correction,
+    )
+
+
+@app.get("/api/episodes")
+async def list_episodes(request: Request, limit: int = Query(50, ge=1, le=100)):
+    context = request.state.request_context
+    episodes = await asyncio.to_thread(
+        get_episodic_repository().list_recent,
+        context["workspace_id"], context["principal_id"], limit=limit,
+    )
+    return {"episodes": episodes}
+
+
+@app.delete("/api/episodes/{episode_id}")
+async def delete_episode(episode_id: str, request: Request):
+    context = request.state.request_context
+    await asyncio.to_thread(
+        get_episodic_repository().delete,
+        context["workspace_id"], context["principal_id"], episode_id,
+    )
+    return {"deleted": True, "episode_id": episode_id}
 
 
 @app.get("/api/state")

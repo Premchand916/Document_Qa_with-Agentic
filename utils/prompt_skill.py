@@ -95,23 +95,39 @@ def _build_execution_profile(body):
 
 
 def _format_history(chat_history, limit=4):
+    summaries = []
     lines = []
-    for message in (chat_history or [])[-limit:]:
+    recent = []
+    for message in chat_history or []:
         role = str(message.get("role") or "user").strip().lower()
+        content = str(message.get("content", "")).strip()
+        if role == "summary" and content:
+            summaries.append(f"earlier-summary: {content}")
+        elif role in {"user", "assistant"} and content:
+            recent.append((role, content))
+    for role, content in recent[-limit:]:
         if role not in {"user", "assistant"}:
             continue
-        content = str(message.get("content", "")).strip()
         if content:
             lines.append(f"{role}: {content}")
-    return "\n".join(lines)
+    return "\n".join(summaries[-1:] + lines)
 
 
 def build_prompted_query(query, state):
     skill = get_prompt_skill()
     body = skill.get("body", "")
+    history_text = _format_history(state.get("chat_history", []))
+    episode_lines = [str(item.get("correction", "")).strip()
+                     for item in state.get("episodic_context", []) if item.get("correction")]
+    episode_text = ("Verified prior outcome guidance (not evidence; current cited evidence must still support the answer):\n" +
+                    "\n".join(f"- {line}" for line in episode_lines)) if episode_lines else ""
     if not body:
-        history_text = _format_history(state.get("chat_history", []))
-        return f"Question: {query}\nRecent conversation context:\n{history_text}" if history_text else query
+        sections = [f"Question: {query}"]
+        if history_text:
+            sections.append(f"Recent conversation context:\n{history_text}")
+        if episode_text:
+            sections.append(episode_text)
+        return "\n".join(sections)
 
     execution_profile = _build_execution_profile(body)
     uploaded_file_types = ", ".join(state.get("uploaded_file_types", [])) or "unknown"
@@ -124,8 +140,6 @@ def build_prompted_query(query, state):
         assets.append("Current web search via Tavily")
     if not assets:
         assets.append("Uploaded files in the current workspace")
-
-    history_text = _format_history(state.get("chat_history", []))
 
     sections = []
     if execution_profile:
@@ -142,6 +156,8 @@ def build_prompted_query(query, state):
                 f"Answer mode: {state.get('answer_mode', 'Auto')}. Audience: {state.get('audience', 'General')}. Depth: {state.get('response_depth', 'Balanced')}.",
                 f"Web search enabled: {'yes' if state.get('use_web_search') else 'no'}.",
                 history_text or "No prior conversation context.",
+                episode_text if episode_text else
+                "No verified prior outcome guidance.",
                 "",
                 "Available assets:",
                 ", ".join(assets),
