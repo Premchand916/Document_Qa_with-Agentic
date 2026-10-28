@@ -1,5 +1,6 @@
 """Selective episodic feedback remains opt-in, scoped, fresh, and non-evidentiary."""
 
+from unittest.mock import patch
 from types import SimpleNamespace
 
 from tests.support import OfflineCase
@@ -126,4 +127,49 @@ class EpisodicMemoryTests(OfflineCase):
         self.assertEqual(invocations[-1]["documents"] if "documents" in invocations[-1] else [], [])
         self.assertEqual(client.delete(f"/api/episodes/{episode_id}").status_code, 200)
         self.assertEqual(client.get("/api/episodes").json()["episodes"], [])
+
+    def test_configured_workspace_reviewer_can_process_queue_with_audit(self):
+        from app.security import AccessSettings
+        from memory.episodic_memory import EpisodicMemoryRepository
+        root = self.temp / "vector_db"
+        _, turn = self.completed_turn(root, workspace="local", principal="alice")
+        episodes = EpisodicMemoryRepository(root)
+        saved = episodes.save_feedback(
+            "local", "alice", turn.conversation_id, "request-key", "Use reviewed total 30.",
+        )
+        secret = "synthetic-test-secret-" * 3
+        settings = AccessSettings(
+            mode="auth_proxy", public_origin="https://docs.example.test", proxy_secret=secret,
+            workspace_id="local", workspace_memberships={"local": ("alice", "reviewer")},
+            workspace_reviewers={"local": ("reviewer",)},
+        )
+        base = {"host": "docs.example.test", "x-docqa-proxy-secret": secret}
+        reviewer = {**base, "x-auth-request-user": "reviewer"}
+        member = {**base, "x-auth-request-user": "alice"}
+        with patch("app.security.get_access_settings", return_value=settings):
+            client = self.client()
+            self.assertEqual(client.get("/api/review/episodes", headers=member).status_code, 403)
+            pending = client.get("/api/review/episodes", headers=reviewer)
+            self.assertEqual(pending.status_code, 200, pending.text)
+            self.assertEqual(pending.json()["episodes"][0]["episode_id"], saved["episode_id"])
+            forged = client.post(
+                f"/api/review/episodes/{saved['episode_id']}", headers=reviewer,
+                json={"decision": "verified", "note": "Checked", "owner_principal_id": "mallory"},
+            )
+            self.assertEqual(forged.status_code, 422)
+            reviewed = client.post(
+                f"/api/review/episodes/{saved['episode_id']}", headers=reviewer,
+                json={"decision": "verified", "note": "Evidence checked"},
+            )
+            self.assertEqual(reviewed.status_code, 200, reviewed.text)
+            self.assertEqual(reviewed.json()["reviewer_id"], "reviewer")
+            repeated = client.post(
+                f"/api/review/episodes/{saved['episode_id']}", headers=reviewer,
+                json={"decision": "rejected", "note": "Stale second review"},
+            )
+            self.assertEqual(repeated.status_code, 404)
+            self.assertEqual(client.get("/api/review/episodes", headers=reviewer).json()["episodes"], [])
+        history = episodes.list_reviews("local", "alice", saved["episode_id"])
+        self.assertEqual(history[0]["reviewer_id"], "reviewer")
+        self.assertEqual(history[0]["decision"], "verified")
 

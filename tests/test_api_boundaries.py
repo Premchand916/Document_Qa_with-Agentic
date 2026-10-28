@@ -164,6 +164,23 @@ class AccessBoundaryTests(OfflineCase):
         with self.access(**config, proxy_peers=("192.0.2.1",)):
             self.assertEqual(self.client().get("/api/state", headers=valid).status_code, 403)
 
+    def test_reviewer_role_is_server_owned_and_must_be_workspace_member(self):
+        secret = "synthetic-test-secret-" * 3
+        memberships = {"local": ("alice", "reviewer")}
+        config = dict(mode="auth_proxy", proxy_secret=secret,
+                      public_origin="https://docs.example.test", workspace_id="local",
+                      workspace_memberships=memberships,
+                      workspace_reviewers={"local": ("reviewer",)})
+        reviewer = {"host": "docs.example.test", "x-docqa-proxy-secret": secret,
+                    "x-auth-request-user": "reviewer"}
+        member = {**reviewer, "x-auth-request-user": "alice"}
+        with self.access(**config):
+            self.assertTrue(self.client().get("/api/workspaces", headers=reviewer).json()["can_review"])
+            self.assertFalse(self.client().get("/api/workspaces", headers=member).json()["can_review"])
+        with self.access(**{**config, "workspace_reviewers": {"local": ("mallory",)}}):
+            response = self.client().get("/api/workspaces", headers=reviewer)
+            self.assertEqual(response.status_code, 503)
+
     def test_request_identity_is_server_owned(self):
         captured = []
         self.seed_workspace()

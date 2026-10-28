@@ -1,6 +1,6 @@
 # RAG Architecture Implementation Plan
 
-**Status: Steps 0–14 have implemented local slices; memory limitation hardening passes, 28 October 2026.** See the linked result document in each step. The full baseline passes 190 offline tests and all six stages; diagnostics show zero reproduced defects, 25 not reproduced, one passing rejection control, zero failed controls, and zero probe errors. Step 12 release evidence, shared identity-provider deployment, and production validation remain incomplete. This plan translates the [architecture audit](../ARCHITECTURE_REVIEW.md) into reviewable steps; confirmed failures and untested attack hypotheses remain separate.
+**Status: Steps 0–15 have implemented local slices; trusted review authorization and label-blind ranking evidence pass, 28 October 2026.** See the linked result document in each step. The full baseline passes 194 offline tests and all seven stages; diagnostics show zero reproduced defects, 25 not reproduced, one passing rejection control, zero failed controls, and zero probe errors. Step 12 release evidence, identity-provider deployment, multi-host storage, and production validation remain incomplete. This plan translates the [architecture audit](../ARCHITECTURE_REVIEW.md) into reviewable steps; confirmed failures and untested attack hypotheses remain separate.
 
 ## Outcome and architecture decisions
 
@@ -249,7 +249,15 @@ Retain Flat as the reference. Benchmark HNSW when vector-search latency dominate
 
 **Gate passed:** older relevant memory outranks newer unrelated memory; no-query recall remains recency-based; export remains owner/workspace scoped; public clients cannot verify episodes; review transitions retain reviewer history; cleanup covers all durable memory stores. Full baseline: 190 tests and all six stages pass.
 
-**Still blocked by architecture decisions:** trusted reviewer/admin web roles, multi-host transactional storage, deployment scheduler wiring, synonym-aware ranking evidence, and model-backed usefulness measurement.
+**Still blocked by architecture decisions:** administrator-controlled procedural approval, multi-host transactional storage, deployment scheduler wiring, synonym-aware ranking evidence, and model-backed usefulness measurement.
+
+## Step 15 — Trusted review authorization and ranking evidence
+
+**Implemented locally:** server-configured workspace reviewer roles, fail-closed role/membership validation, pending review API and Studio UI, atomic one-time review processing, and separated task/label semantic-ranking evaluation. See [Step 15 results](STEP15_RESULTS.md).
+
+**Gate passed:** ordinary members cannot review, clients cannot forge identity or episode ownership, invalid role configuration returns 503, audit reviewer identity is durable, and development-blind semantic ranking reaches Recall@1 1.0. Full baseline: 194 tests and all seven stages pass.
+
+**Still external:** trusted identity-provider deployment. `auth_proxy` is the adapter boundary; production proxy must authenticate subjects and protect signed/internal headers.
 
 ## Expansion after the foundation
 
@@ -268,4 +276,4 @@ The requested general assistant is a separate product scope beyond document QA. 
 - **C — Steps 6–8:** durable conversations, observable retrieval/reranking, evidence-based answers. Demonstrate an end-to-end follow-up.
 - **D — Steps 9–11:** optional episodic recall, measured operations, migration/scale decisions. Demonstrate release evidence.
 
-**Next implementation action: create and run a label-blind Ollama memory-quality evaluation without training, then decide whether failures belong to retrieval, memory ranking, prompting, or model behavior. Fine-tuning remains paused now.** Exposed calibration and failed release-attempt sets are non-release evidence. Production rollout has not occurred. Multi-process load, multi-host storage, trusted review roles, identity-provider deployment, physical-device UI checks, multilingual OCR, cross-encoder deployment, and deployment-specific retention approval remain open.
+**Next implementation action: design PostgreSQL repository contracts and migration evidence without switching runtime storage, or run a label-blind Ollama memory-quality evaluation without training. Fine-tuning remains paused now.** Exposed calibration and failed release-attempt sets are non-release evidence. Production rollout has not occurred. Multi-host storage, identity-provider deployment, physical-device UI checks, multilingual OCR, cross-encoder deployment, and deployment-specific retention approval remain open.

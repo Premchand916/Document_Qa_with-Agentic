@@ -625,6 +625,30 @@ body{display:flex;flex-direction:column;position:relative;z-index:1}
 
     <div class="div"></div>
 
+    <div class="save-sec" x-show="canReview">
+      <div class="notes-hdr">
+        <span class="ctrl-lbl">Feedback Review</span>
+        <span class="n-cnt" x-text="reviewQueue.length"></span>
+      </div>
+      <button class="save-btn" type="button" :disabled="busy" @click="refreshReviewQueue()">
+        <span>↻</span><span>Refresh review queue</span>
+      </button>
+      <div class="n-list" x-show="reviewQueue.length">
+        <template x-for="episode in reviewQueue" :key="episode.episode_id">
+          <div class="note">
+            <div class="note-src" x-text="episode.owner_principal_id+' · '+episode.task_key"></div>
+            <div class="note-txt" x-text="episode.correction"></div>
+            <div class="note-ft">
+              <button class="act-btn" type="button" @click="reviewEpisode(episode.episode_id,'verified')">Approve</button>
+              <button class="act-btn act-danger" type="button" @click="reviewEpisode(episode.episode_id,'rejected')">Reject</button>
+            </div>
+          </div>
+        </template>
+      </div>
+    </div>
+
+    <div class="div" x-show="canReview"></div>
+
     <div class="save-sec">
       <div class="notes-hdr">
         <span class="ctrl-lbl">Semantic Memory</span>
@@ -696,11 +720,11 @@ body{display:flex;flex-direction:column;position:relative;z-index:1}
 function nexus() {
   return {
     // ── State ─────────────────────────────────────────────────────────────
-    workspaceId: "", workspaces: [], canSelectWorkspace: false, switching: true, providerChanging: false,
+    workspaceId: "", workspaces: [], canSelectWorkspace: false, canReview: false, switching: true, providerChanging: false,
     files: [], dragging: false, indexing: false, uploadWarnings: [], ingestionJob: null, ingestionStage: 'Indexing documents…',
     chatHistory: [], conversations: [], conversationId: '', conversationNextBefore: null, pendingSubmission: null, corpusVersion: null, txt: '', loading: false,
     srcKey: null,
-    notes: [], memories: [], lastRes: null, feedbackStatus: '', memoryStatus: '',
+    notes: [], memories: [], reviewQueue: [], lastRes: null, feedbackStatus: '', memoryStatus: '',
     questions: [],
     err: null,
     statusText: 'Upload files to begin', statusReady: false,
@@ -716,6 +740,7 @@ function nexus() {
         this.workspaceId = data.workspace_id;
         this.workspaces = data.workspaces;
         this.canSelectWorkspace = data.can_select;
+        this.canReview = data.can_review === true;
         await this.loadWorkspace();
       } catch(e) { this.err=e.message; }
       finally { this.switching=false; }
@@ -749,6 +774,7 @@ function nexus() {
       this.corpusVersion = s.corpus_version || null;
       await this.refreshConversations(true);
       await this.refreshSemanticMemories();
+      if(this.canReview) await this.refreshReviewQueue();
       const jobsResponse = await this.apiFetch('/api/ingestion-jobs?limit=10');
       if(jobsResponse.ok) {
         const active=((await jobsResponse.json()).jobs||[]).find(job=>['queued','running','cancel_requested'].includes(job.status));
@@ -813,10 +839,15 @@ function nexus() {
       if (this.busy || workspace === this.workspaceId || !this.workspaces.includes(workspace)) return;
       this.switching=true;
       this.workspaceId=workspace;
-      this.chatHistory=[]; this.conversationId=''; this.conversationNextBefore=null; this.pendingSubmission=null; this.conversations=[]; this.notes=[]; this.memories=[]; this.lastRes=null; this.feedbackStatus=''; this.memoryStatus=''; this.srcKey=null;
+      this.chatHistory=[]; this.conversationId=''; this.conversationNextBefore=null; this.pendingSubmission=null; this.conversations=[]; this.notes=[]; this.memories=[]; this.reviewQueue=[]; this.lastRes=null; this.feedbackStatus=''; this.memoryStatus=''; this.srcKey=null;
       this.txt=''; this.files=[]; this.questions=[]; this.err=null; this.uploadWarnings=[];
       this.statusReady=false; this.statusText='Loading workspace';
-      try { await this.loadWorkspace(); }
+      try {
+        const access=await this.apiFetch('/api/workspaces');
+        if(!access.ok) throw new Error(await this.apiError(access,'Could not load workspace access'));
+        this.canReview=(await access.json()).can_review===true;
+        await this.loadWorkspace();
+      }
       catch(e) { this.err=e.message; this.statusText='Workspace unavailable'; }
       finally { this.switching=false; }
     },
@@ -1017,6 +1048,22 @@ function nexus() {
       const r=await this.apiFetch('/api/memories/semantic');
       if(!r.ok) throw new Error(await this.apiError(r,'Could not load semantic memory'));
       this.memories=(await r.json()).memories||[];
+    },
+    async refreshReviewQueue(){
+      if(!this.canReview) return;
+      const r=await this.apiFetch('/api/review/episodes');
+      if(!r.ok) { this.err=await this.apiError(r,'Could not load feedback review queue'); return; }
+      this.reviewQueue=(await r.json()).episodes||[];
+    },
+    async reviewEpisode(episodeId,decision){
+      if(!this.canReview || this.busy) return;
+      const note=(globalThis.prompt(decision==='verified'?'Approval note':'Rejection reason')||'').trim();
+      const r=await this.apiFetch('/api/review/episodes/'+encodeURIComponent(episodeId),{
+        method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({decision,note}),
+      });
+      if(!r.ok) { this.err=await this.apiError(r,'Could not review feedback'); return; }
+      await this.refreshReviewQueue();
+      this.feedbackStatus=decision==='verified'?'Feedback approved.':'Feedback rejected.';
     },
     async addSemanticMemory(){
       if(this.busy) return;

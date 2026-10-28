@@ -26,6 +26,7 @@ Validate the memory foundation without a model call:
 
 ```bash
 python3 -m tools.evaluate_memory
+python3 -m tools.evaluate_memory_retrieval
 ```
 
 Run retention cleanup from a deployment scheduler:
@@ -164,6 +165,9 @@ GOOGLE_API_KEY=your_api_key
 HF_LOCAL_FILES_ONLY=true
 EMBEDDING_BATCH_SIZE=32
 DOCQA_AUTH_MODE=local
+# Auth-proxy mode only; each reviewer must also appear in workspace memberships.
+# DOCQA_WORKSPACE_MEMBERSHIPS={"finance":["alice","reviewer@example.com"]}
+# DOCQA_WORKSPACE_REVIEWERS={"finance":["reviewer@example.com"]}
 DOCQA_TURN_LEASE_SECONDS=60
 DOCQA_CONVERSATION_RETENTION_DAYS=90
 DOCQA_EPISODE_RETENTION_DAYS=180

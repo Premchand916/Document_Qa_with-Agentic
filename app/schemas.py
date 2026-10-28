@@ -55,6 +55,13 @@ class EpisodeFeedbackRequest(BaseModel):
                                                   min_length=1, max_length=4000)]
 
 
+class EpisodeReviewRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    decision: Literal["verified", "rejected"]
+    note: Annotated[str, StringConstraints(strict=True, strip_whitespace=True,
+                                            max_length=2000)] = ""
+
+
 class SemanticMemoryRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     category: Literal["preference", "profile", "constraint", "terminology"]

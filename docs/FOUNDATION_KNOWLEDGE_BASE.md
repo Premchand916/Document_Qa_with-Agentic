@@ -249,3 +249,22 @@ Use this record for foundation changes: understand requirements, state invariant
 - Added scheduler-compatible purge CLI covering working, episodic, and semantic memory.
 - Full baseline passed 190 tests; memory evaluation passed all nine checks with 0.454 ms p95 local recall.
 - Remaining decisions: reviewer/admin web authorization, multi-host database, external scheduler wiring, label-blind model usefulness evaluation, and any later fine-tuning.
+
+## Active work — Step 15 trusted review and ranking evidence
+
+### Requirements
+
+- Derive reviewer authority from server configuration, never JSON bodies or browser state.
+- Require reviewer to remain a member of reviewed workspace.
+- Prevent owner forgery and concurrent double-review.
+- Keep review audit and status transition atomic.
+- Evaluate semantic ranking with separate inference tasks and labels.
+
+### Result — 28 October 2026
+
+- Added `DOCQA_WORKSPACE_REVIEWERS`, server-derived `can_review`, pending review API, and conditional Studio queue.
+- Added atomic unverified-only approve/reject path; server resolves episode owner and records authenticated reviewer.
+- Invalid/non-member reviewer configuration fails with 503; ordinary members receive 403.
+- Added development-blind memory-retrieval tasks/labels and label-leakage rejection; Recall@1 reached 1.0.
+- Expanded semantic-memory rejection for secret assignments, credential-bearing URLs, and JWT-like tokens.
+- Full baseline passed 194 tests and seven stages. Fine-tuning remains paused.

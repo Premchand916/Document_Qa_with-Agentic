@@ -146,7 +146,8 @@ class EpisodicMemoryRepository:
                 "validation_status": "unverified", "expires_at": expires_at}
 
     def review(self, workspace: str, principal: str, episode_id: str, status: str,
-               reviewer_id: str, *, note: str = "", now: int | None = None) -> dict:
+               reviewer_id: str, *, note: str = "", now: int | None = None,
+               expected_status: str | None = None) -> dict:
         """Operator validation boundary; intentionally not exposed as a public API route."""
         self._validate(workspace, principal, episode_id)
         if status not in {"verified", "rejected"}:
@@ -167,6 +168,8 @@ class EpisodicMemoryRepository:
             if current is None:
                 raise EpisodeNotFound()
             previous_status = current["validation_status"]
+            if expected_status is not None and previous_status != expected_status:
+                raise EpisodeNotFound()
             connection.execute("""UPDATE episodes SET validation_status=?
                 WHERE workspace_id=? AND principal_id=? AND episode_id=?""",
                 (status, workspace, principal, episode_id))
@@ -199,6 +202,43 @@ class EpisodicMemoryRepository:
                 ORDER BY reviewed_at ASC,review_id ASC""",
                 (workspace, principal, episode_id)).fetchall()
         return [dict(row) for row in rows]
+
+    def list_pending(self, workspace: str, *, now: int | None = None,
+                     limit: int = 50) -> list[dict]:
+        workspace_key(workspace)
+        if not 1 <= limit <= 100:
+            raise ValueError("Pending episode limit must be between 1 and 100")
+        current_time = int(time.time() if now is None else now)
+        with self._connect() as connection:
+            rows = connection.execute("""SELECT principal_id,episode_id,conversation_id,
+                task_key,correction,corpus_version,source_ids_json,evidence_json,created_at,expires_at
+                FROM episodes WHERE workspace_id=? AND validation_status='unverified'
+                  AND expires_at>? ORDER BY created_at ASC,episode_id ASC LIMIT ?""",
+                (workspace, current_time, limit)).fetchall()
+        return [{"owner_principal_id": row["principal_id"], "episode_id": row["episode_id"],
+                 "conversation_id": row["conversation_id"], "task_key": row["task_key"],
+                 "correction": row["correction"], "corpus_version": row["corpus_version"],
+                 "source_ids": json.loads(row["source_ids_json"]),
+                 "evidence": json.loads(row["evidence_json"]),
+                 "created_at": row["created_at"], "expires_at": row["expires_at"]}
+                for row in rows]
+
+    def review_pending(self, workspace: str, episode_id: str, status: str,
+                       reviewer_id: str, *, note: str = "", now: int | None = None) -> dict:
+        workspace_key(workspace)
+        self._validate(workspace, reviewer_id)
+        if not re.fullmatch(r"[a-f0-9]{32}", episode_id):
+            raise ValueError("Invalid identifier")
+        with self._connect() as connection:
+            rows = connection.execute("""SELECT principal_id FROM episodes
+                WHERE workspace_id=? AND episode_id=? AND validation_status='unverified'""",
+                (workspace, episode_id)).fetchall()
+        if len(rows) != 1:
+            raise EpisodeNotFound()
+        return self.review(
+            workspace, rows[0]["principal_id"], episode_id, status,
+            reviewer_id, note=note, now=now, expected_status="unverified",
+        )
 
     def recall(self, workspace: str, principal: str, question: str,
                corpus_version: str | None, *, now: int | None = None, limit: int = 3) -> list[dict]:

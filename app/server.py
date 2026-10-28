@@ -29,7 +29,8 @@ load_dotenv(ROOT_DIR / ".env")
 from agents.orchestrator_agent import get_active_provider, LLMConfigurationError, OllamaModelMemoryError
 from agents.question_generator import generate_questions
 from app.prompt_library import PROMPT_LIBRARY, get_prompt_categories
-from app.schemas import ChatRequest, EpisodeFeedbackRequest, ProviderRequest, SemanticMemoryRequest
+from app.schemas import (ChatRequest, EpisodeFeedbackRequest, EpisodeReviewRequest,
+                         ProviderRequest, SemanticMemoryRequest)
 from app.security import BoundaryMiddleware, MAX_FILE_BYTES, MAX_FILES, error_response
 from ingestion.file_loader import (IngestionLimitError, OCRConfigurationError, OCRRequiredError,
                                    parse_uploaded_file)
@@ -755,6 +756,33 @@ async def delete_episode(episode_id: str, request: Request):
     return {"deleted": True, "episode_id": episode_id}
 
 
+def _require_reviewer(context: dict) -> None:
+    if context.get("can_review") is not True:
+        raise HTTPException(status_code=403, detail="Reviewer role is required.")
+
+
+@app.get("/api/review/episodes")
+async def list_pending_episode_reviews(request: Request, limit: int = Query(50, ge=1, le=100)):
+    context = request.state.request_context
+    _require_reviewer(context)
+    episodes = await asyncio.to_thread(
+        get_episodic_repository().list_pending,
+        context["workspace_id"], limit=limit,
+    )
+    return {"episodes": episodes}
+
+
+@app.post("/api/review/episodes/{episode_id}")
+async def review_episode(episode_id: str, req: EpisodeReviewRequest, request: Request):
+    context = request.state.request_context
+    _require_reviewer(context)
+    return await asyncio.to_thread(
+        get_episodic_repository().review_pending,
+        context["workspace_id"], episode_id, req.decision, context["principal_id"],
+        note=req.note,
+    )
+
+
 @app.put("/api/memories/semantic")
 async def save_semantic_memory(req: SemanticMemoryRequest, request: Request):
     context = request.state.request_context
@@ -803,7 +831,7 @@ async def get_state(request: Request):
 async def get_workspaces(request: Request):
     context = request.state.request_context
     return {"workspace_id": context["workspace_id"], "workspaces": context["allowed_workspaces"],
-            "can_select": context["can_select_workspace"]}
+            "can_select": context["can_select_workspace"], "can_review": context["can_review"]}
 
 
 @app.post("/api/provider")

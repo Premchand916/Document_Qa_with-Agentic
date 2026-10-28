@@ -32,6 +32,7 @@ def main() -> int:
         ("ingestion", ["-m", "tools.measure_ingestion", "--output", str(folder / "ingestion.json")]),
         ("index_benchmark", ["-m", "tools.benchmark_faiss_indexes", "--output", str(folder / "index-benchmark.json")]),
         ("memory", ["-m", "tools.evaluate_memory", "--output", str(folder / "memory.json")]),
+        ("memory_retrieval", ["-m", "tools.evaluate_memory_retrieval", "--output", str(folder / "memory-retrieval.json")]),
         ("environment", ["-m", "tools.baseline_environment", "--output-dir", str(folder)]),
     ]
     stages = []
@@ -54,6 +55,7 @@ def main() -> int:
     ingestion = json.loads((folder / "ingestion.json").read_text()) if (folder / "ingestion.json").exists() and stages[2]["exit_code"] == 0 else None
     index_benchmark = json.loads((folder / "index-benchmark.json").read_text()) if (folder / "index-benchmark.json").exists() and stages[3]["exit_code"] == 0 else None
     memory_evaluation = json.loads((folder / "memory.json").read_text()) if (folder / "memory.json").exists() and stages[4]["exit_code"] == 0 else None
+    memory_retrieval = json.loads((folder / "memory-retrieval.json").read_text()) if (folder / "memory-retrieval.json").exists() and stages[5]["exit_code"] == 0 else None
     diagnostic_gate = bool(audit) and audit["summary"] == {
         "reproduced": 0, "not_reproduced": 25, "control_passed": 1,
         "control_failed": 0, "probe_error": 0,
@@ -64,6 +66,7 @@ def main() -> int:
               "ingestion_measurement": ingestion,
               "index_benchmark": index_benchmark,
               "memory_evaluation": memory_evaluation,
+              "memory_retrieval_evaluation": memory_retrieval,
               "fixture_sha256": {str(path.relative_to(ROOT)): hashlib.sha256(path.read_bytes()).hexdigest()
                                  for path in sorted((ROOT / "tests/fixtures").rglob("*")) if path.is_file()},
               "interpretation": "Offline foundation checks only. Any reproduced defect, failed control, or probe error fails this gate. No live model quality measured."}

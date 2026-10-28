@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "dataset_id": "docqa-memory-retrieval-2026-10-v1",
+  "split": "development_blind",
+  "cases": [
+    {
+      "id": "older-relevant-key",
+      "query": "What is the warranty coverage period?",
+      "memories": [
+        {"category": "terminology", "key": "Warranty period", "value": "Coverage lasts 24 months", "updated_at": 100},
+        {"category": "preference", "key": "Formatting", "value": "Use bullets", "updated_at": 300}
+      ]
+    },
+    {
+      "id": "relevant-value",
+      "query": "Prepare this for leadership",
+      "memories": [
+        {"category": "profile", "key": "Audience", "value": "Leadership", "updated_at": 100},
+        {"category": "preference", "key": "Language", "value": "English", "updated_at": 300}
+      ]
+    },
+    {
+      "id": "recency-fallback",
+      "query": "?",
+      "memories": [
+        {"category": "preference", "key": "Older style", "value": "Paragraphs", "updated_at": 100},
+        {"category": "preference", "key": "Current style", "value": "Bullets", "updated_at": 300}
+      ]
+    }
+  ]
+}

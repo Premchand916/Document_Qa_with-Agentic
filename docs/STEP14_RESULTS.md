@@ -91,10 +91,10 @@ The repository does not install an OS scheduler because schedule ownership depen
 
 ## Remaining boundaries
 
-1. **Trusted web reviewer role:** not built. Current authentication defines membership, not reviewer/admin authorization. Add signed roles and server-side authorization before review APIs or UI.
+1. **Trusted web reviewer role:** server-owned workspace reviewer authorization and UI were added in [Step 15](STEP15_RESULTS.md). Identity-provider deployment remains external.
 2. **Multi-host persistence:** not built. Local SQLite is correct for current deployment. Move repository interfaces to PostgreSQL only when multi-host topology and migration/rollback requirements are known.
 3. **External schedule wiring:** purge target exists; production deployment must invoke it and monitor failures.
-4. **Semantic ranking quality:** lexical ranking is deterministic but does not understand synonyms. Compare it with embedding or learned ranking on a label-blind set before changing it.
+4. **Semantic ranking quality:** separated task/label development evaluation was added in Step 15. Lexical ranking still does not understand general synonyms.
 5. **Secret detection:** pattern rejection is defense-in-depth, not a complete data-loss-prevention system. UI warning, explicit opt-in, access control, and deletion remain required.
 6. **Model behavior:** deterministic tests prove data boundaries, not answer usefulness. Run a label-blind Ollama memory evaluation before fine-tuning or using memory traces as training data.
 

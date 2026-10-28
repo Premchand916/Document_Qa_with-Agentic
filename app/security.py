@@ -31,17 +31,20 @@ class AccessSettings:
     proxy_peers: tuple[str, ...] = ("127.0.0.1", "::1")
     allowed_subjects: tuple[str, ...] = ()
     workspace_memberships: dict[str, tuple[str, ...]] = field(default_factory=dict)
+    workspace_reviewers: dict[str, tuple[str, ...]] = field(default_factory=dict)
 
 
 def get_access_settings() -> AccessSettings:
     try:
         memberships = json.loads(os.getenv("DOCQA_WORKSPACE_MEMBERSHIPS", "{}"))
-        if not isinstance(memberships, dict):
+        reviewers = json.loads(os.getenv("DOCQA_WORKSPACE_REVIEWERS", "{}"))
+        if not isinstance(memberships, dict) or not isinstance(reviewers, dict):
             raise ValueError("Expected an object")
     except (ValueError, TypeError):
         raise BoundaryError(503, "access_not_configured", "Workspace membership is not configured.") from None
     return AccessSettings(
         workspace_memberships=memberships,
+        workspace_reviewers=reviewers,
         mode=os.getenv("DOCQA_AUTH_MODE", "disabled"),
         public_origin=os.getenv("DOCQA_PUBLIC_ORIGIN", ""),
         workspace_id=os.getenv("DOCQA_WORKSPACE_ID", "local"),
@@ -97,6 +100,14 @@ def authorize(scope: dict, headers: Headers, settings: AccessSettings) -> dict:
                 or any(not isinstance(member, str) or not member for member in members)
                 for key, members in memberships.items())):
             raise BoundaryError(503, "access_not_configured", "Workspace membership is not configured.")
+        reviewers = settings.workspace_reviewers
+        if (not isinstance(reviewers, dict) or any(
+                workspace not in memberships
+                or not isinstance(subjects, (list, tuple)) or not subjects
+                or any(not isinstance(subject, str) or subject not in memberships[workspace]
+                       for subject in subjects)
+                for workspace, subjects in reviewers.items())):
+            raise BoundaryError(503, "access_not_configured", "Workspace reviewer roles are not configured safely.")
         permitted = sorted(key for key, members in memberships.items() if principal in members)
         workspace = headers.get("x-workspace-id") or (settings.workspace_id if settings.workspace_id in permitted else next(iter(permitted), ""))
         if not principal or workspace not in permitted:
@@ -106,8 +117,9 @@ def authorize(scope: dict, headers: Headers, settings: AccessSettings) -> dict:
         raise BoundaryError(503, "access_not_configured", "Set DOCQA_AUTH_MODE to configure application access.")
     if headers.get("origin", origin) != origin or headers.get("sec-fetch-site") == "cross-site":
         raise BoundaryError(403, "cross_origin_rejected", "Cross-origin requests are not permitted.")
+    can_review = principal in settings.workspace_reviewers.get(workspace, ())
     return {"principal_id": principal, "workspace_id": workspace, "allowed_workspaces": permitted,
-            "can_select_workspace": settings.mode == "auth_proxy"}
+            "can_select_workspace": settings.mode == "auth_proxy", "can_review": can_review}
 
 
 class BoundaryMiddleware:

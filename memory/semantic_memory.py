@@ -22,7 +22,11 @@ _FORBIDDEN_KEY = re.compile(
 )
 _SECRET_VALUE = re.compile(
     r"-----BEGIN [A-Z ]*PRIVATE KEY-----|\b(?:sk|ghp|xox[baprs])[-_][A-Za-z0-9_-]{16,}\b|"
-    r"\bAKIA[A-Z0-9]{16}\b",
+    r"\bAKIA[A-Z0-9]{16}\b|"
+    r"\b(?:password|passcode|secret|api[ _-]?key|access[ _-]?token|credential)\s*"
+    r"(?:is\s+|[:=]\s*)\S+|"
+    r"\b[a-z][a-z0-9+.-]*://[^\s/:@]+:[^\s/@]+@[^\s]+|"
+    r"\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b",
     re.IGNORECASE,
 )
 _INSTRUCTION_OVERRIDE = re.compile(
