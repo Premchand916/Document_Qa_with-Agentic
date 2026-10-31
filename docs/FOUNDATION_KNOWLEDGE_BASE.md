@@ -326,3 +326,28 @@ Use this record for foundation changes: understand requirements, state invariant
 - Keep evidence-first behavior even when it lowers preference adherence.
 - Do not truncate or rewrite grounded answers with heuristic post-processing; that can remove facts and citations.
 - Treat preference adherence as isolated model/presentation-layer work. Compare typed preferences with fine-tuning later on a new frozen dataset.
+
+## Active work — Step 19 chat-first product shell
+
+### Requirements
+
+- Remove document drag/drop from primary conversation surface.
+- Keep knowledge ingestion available as a small, separate workspace-management action.
+- Make durable chats, search, composer, and tool selection primary interface.
+- Allow honest general chat without pretending workspace or web evidence exists.
+- Preserve grounded citations whenever SOP, SOW, table, or web evidence is used.
+
+### Result — 31 October 2026
+
+- Replaced fixed source/chat/studio layout with chat sidebar, focused conversation canvas, centered composer, modal Knowledge Sources, and optional memory drawer.
+- Moved prompt library, web search, response mode, audience, and depth into composer tools.
+- Added general-chat dispatch when no corpus/web source exists; response contract has no documents/citations and identifies model knowledge.
+- Preserved local ingestion service behind Knowledge Sources so existing isolation, limits, async jobs, atomic publication, and corpus versioning remain intact.
+- Validated desktop rendering plus 390 px mobile width, modal opening, tool menu opening, and off-canvas navigation.
+- Added `docs/ASSISTANT_PRODUCT_ARCHITECTURE.md` to map observable assistant patterns to Nexus-specific components and trust boundaries.
+
+### Decision
+
+- Do not clone proprietary branding or claim reverse-engineered internals.
+- Separate chat, workspace knowledge, memory, tools, skills, and agents by authority and lifecycle.
+- Connector registry is next; visual similarity alone does not provide ChatGPT-like capability.

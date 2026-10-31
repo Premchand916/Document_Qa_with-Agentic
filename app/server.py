@@ -26,6 +26,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 load_dotenv(ROOT_DIR / ".env")
 
+from agents import orchestrator_agent
 from agents.orchestrator_agent import get_active_provider, LLMConfigurationError, OllamaModelMemoryError
 from agents.question_generator import generate_questions
 from app.prompt_library import PROMPT_LIBRARY, get_prompt_categories
@@ -537,13 +538,6 @@ def _run_chat_graph(req: ChatRequest, context: dict, history: list[dict], conver
     semantic_context = get_semantic_repository().recall(
         context["workspace_id"], context["principal_id"], req.query,
     )
-    can_run = req.use_web_search or snapshot.vectorstore is not None or bool(snapshot.tabular_assets)
-    if not can_run:
-        raise HTTPException(
-            status_code=422,
-            detail="Upload at least one file or enable web search first.",
-        )
-
     prompt_query = build_prompted_query(
         req.query,
         {
@@ -559,6 +553,49 @@ def _run_chat_graph(req: ChatRequest, context: dict, history: list[dict], conver
             "semantic_context": semantic_context,
         },
     )
+
+    has_grounded_source = (req.use_web_search or snapshot.vectorstore is not None
+                           or bool(snapshot.tabular_assets))
+    if not has_grounded_source:
+        prompt = (
+            "You are Nexus, a helpful general assistant. No workspace knowledge source or web evidence "
+            "is connected for this turn. Answer ordinary general questions concisely from model knowledge. "
+            "Do not claim to have read an SOP, SOW, file, connector, or current web source. If the question "
+            "requires organization-specific or current information, explain that the user must connect a "
+            "knowledge source or enable web search. Semantic memory is response guidance only and never "
+            "factual evidence.\n\n"
+            f"{prompt_query}\n\nAnswer:"
+        )
+        try:
+            model_response = orchestrator_agent.invoke_orchestrator(prompt, provider=snapshot.provider)
+        except (LLMConfigurationError, OllamaModelMemoryError):
+            raise ProviderUnavailableError() from None
+        response_text = getattr(model_response, "content", model_response)
+        if isinstance(response_text, list):
+            response_text = " ".join(
+                str(getattr(item, "text", item.get("text", item) if isinstance(item, dict) else item))
+                for item in response_text
+            )
+        return {
+            "conversation_id": conversation_id,
+            "idempotency_key": idempotency_key,
+            "workspace_id": snapshot.workspace_id,
+            "corpus_version": snapshot.version,
+            "response": str(response_text).strip(),
+            "source": "Model knowledge",
+            "sources": [],
+            "documents": [],
+            "retrieval_status": {"status": "not_run", "reason": "general_chat_no_sources"},
+            "citations": [],
+            "evidence_status": {"status": "not_applicable"},
+            "response_plan": {
+                "intent": "general_chat",
+                "answer_mode": req.answer_mode,
+                "output_format": "Conversational response",
+            },
+            "result_status": "answered",
+            "tool_result": None,
+        }
 
     graph_state = {
         "query": req.query,

@@ -21,6 +21,8 @@ This system enables users to upload documents (PDF, PPT, Excel, CSV, JSON, etc.)
 - 🔎 Bounded local OCR for images and scanned PDFs
 - 🧠 Bounded working memory, explicit semantic memory, and verified episodic feedback
 - 🛡️ Versioned code/operator-owned procedural guidance; no self-modifying procedures
+- 💬 Chat-first interface with durable conversations and source-free general chat
+- ▱ Separate workspace Knowledge Sources manager for SOP/SOW ingestion
 
 Validate the memory foundation without a model call:
 

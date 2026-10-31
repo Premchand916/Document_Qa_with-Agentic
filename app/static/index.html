@@ -82,20 +82,6 @@ body{display:flex;flex-direction:column;position:relative;z-index:1}
 .thread-delete{color:#ff8f9b;border-color:rgba(255,95,109,.3)}
 .thread-new:disabled,.thread-select:disabled{opacity:.5;cursor:not-allowed}
 
-/* ── Upload area ─────────────────────────────────────────────────────── */
-.upload{
-  margin:4px 12px 12px;border:1.5px dashed rgba(0,212,255,.22);
-  border-radius:var(--r3);padding:22px 16px;text-align:center;cursor:pointer;
-  transition:all .25s;background:rgba(0,212,255,.02);
-}
-.upload:hover,.upload.over{border-color:rgba(0,212,255,.5);background:rgba(0,212,255,.06);box-shadow:var(--glow-c)}
-.upload-ico{font-size:26px;color:var(--cyan);opacity:.65;margin-bottom:8px}
-.upload-txt{font-size:13px;color:var(--txt2);margin-bottom:4px}
-.upload-lnk{color:var(--cyan);cursor:pointer}
-.upload-lnk:hover{text-decoration:underline}
-.upload-sub{font-size:11px;color:var(--muted);letter-spacing:.02em}
-.file-list{padding:0 12px;display:flex;flex-direction:column;gap:4px}
-.file-row{display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:var(--r2);background:var(--surf2);border:1px solid var(--border);font-size:12px;color:var(--txt2);word-break:break-all}
 .f-ico{flex-shrink:0;font-size:15px}
 
 /* ── Indexing spinner ────────────────────────────────────────────────── */
@@ -327,6 +313,128 @@ body{display:flex;flex-direction:column;position:relative;z-index:1}
   .msgs{padding:12px}
   .inp-area{padding:10px}
 }
+
+/* ── Chat workspace shell ───────────────────────────────────────────── */
+.workspace{grid-template-columns:264px minmax(0,1fr);background:rgba(2,8,16,.72)}
+.panel-l{background:#050b14;border-right:1px solid rgba(255,255,255,.08);padding:10px;overflow:hidden}
+.panel-c{background:rgba(4,10,19,.62)}
+.panel-r{display:none;position:fixed;z-index:420;right:0;top:56px;bottom:0;width:360px;background:#07101d;border-left:1px solid var(--border);box-shadow:-22px 0 55px rgba(0,0,0,.48)}
+.panel-r.open{display:flex}
+.studio-toggle,.studio-close{display:inline-flex}
+.mobile-menu{display:none;width:34px;height:34px;align-items:center;justify-content:center;border:0;border-radius:9px;background:transparent;color:var(--txt2);font-size:20px;cursor:pointer}
+.mobile-menu:hover{background:var(--surf2);color:var(--txt)}
+.logo-name{letter-spacing:.1em}
+.topbar{height:56px;padding:0 16px}
+.topbar-right .pill:nth-child(n+2){display:none}
+.sidebar-new{width:100%;display:flex;align-items:center;gap:10px;padding:11px 12px;border:1px solid var(--border);border-radius:12px;background:rgba(255,255,255,.035);color:var(--txt);font:inherit;font-weight:600;cursor:pointer;transition:.2s}
+.sidebar-new:hover{background:var(--surf3);border-color:var(--border2)}
+.sidebar-search{position:relative;margin-top:10px}
+.sidebar-search input{width:100%;border:0;border-radius:10px;background:transparent;color:var(--txt);font:inherit;padding:9px 10px 9px 32px;outline:none}
+.sidebar-search input:focus{background:var(--surf2)}
+.sidebar-search span{position:absolute;left:10px;top:9px;color:var(--muted)}
+.sidebar-nav{display:flex;flex-direction:column;gap:3px;margin:8px 0}
+.nav-button{width:100%;display:flex;align-items:center;gap:10px;padding:9px 10px;border:0;border-radius:9px;background:transparent;color:var(--txt2);font:inherit;text-align:left;cursor:pointer}
+.nav-button:hover,.nav-button.active{background:var(--surf2);color:var(--txt)}
+.nav-button .nav-count{margin-left:auto;padding:1px 7px;border-radius:99px;background:var(--surf3);font-size:11px;color:var(--muted)}
+.sidebar-section-label{font-size:10px;font-weight:700;letter-spacing:.12em;color:var(--muted);padding:10px 10px 6px;text-transform:uppercase}
+.conversation-list{flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:2px;padding-right:2px}
+.conversation-row{display:flex;align-items:center;border-radius:9px;transition:.2s}
+.conversation-row:hover,.conversation-row.active{background:var(--surf2)}
+.conversation-open{min-width:0;flex:1;border:0;background:transparent;color:var(--txt2);font:inherit;font-size:13px;text-align:left;padding:9px 10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer}
+.conversation-row.active .conversation-open{color:var(--txt)}
+.conversation-delete{display:none;width:28px;height:28px;border:0;background:transparent;color:var(--muted);cursor:pointer;border-radius:7px;margin-right:4px}
+.conversation-row:hover .conversation-delete,.conversation-row.active .conversation-delete{display:block}
+.conversation-delete:hover{background:rgba(239,68,68,.1);color:#fca5a5}
+.sidebar-empty{padding:16px 10px;color:var(--muted);font-size:12px;line-height:1.5}
+.sidebar-footer{border-top:1px solid var(--border);padding-top:10px;margin-top:8px}
+.sidebar-workspace{display:flex;align-items:center;gap:9px;padding:8px 9px;border-radius:10px;background:var(--surf2)}
+.sidebar-workspace .sel{border:0;background-color:transparent;padding-left:0;font-size:12px}
+.provider-mini{display:flex;gap:5px;margin-top:8px}
+.provider-mini .p-btn{padding:6px;font-size:11px}
+.chat-head{height:54px;display:flex;align-items:center;justify-content:space-between;padding:0 20px;border-bottom:1px solid var(--border);flex-shrink:0;background:rgba(4,10,19,.74);backdrop-filter:blur(18px)}
+.chat-title-wrap{min-width:0}
+.chat-kicker{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.12em}
+.chat-title{font-size:14px;font-weight:600;color:var(--txt);max-width:520px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.chat-actions{display:flex;gap:7px}
+.icon-button{border:1px solid var(--border);border-radius:9px;background:var(--surf2);color:var(--txt2);font:inherit;font-size:12px;padding:6px 9px;cursor:pointer}
+.icon-button:hover{background:var(--surf3);color:var(--txt)}
+.msgs{padding:28px 24px 18px;gap:24px}
+.msg{width:min(100%,860px);margin:0 auto}
+.bubble{max-width:100%}
+.msg-u .bubble{max-width:78%;margin-left:auto;background:#182231;border:0;border-radius:18px;padding:11px 15px}
+.msg-a .bubble{width:100%;background:transparent;border:0;border-radius:0;padding:0 4px}
+.empty{width:min(100%,820px);margin:0 auto;padding:52px 24px 28px;justify-content:center}
+.empty-hex{font-size:38px;margin-bottom:14px}
+.empty-title{font-size:28px;margin-bottom:8px}
+.empty-sub{max-width:560px;font-size:14px}
+.starter-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;width:min(100%,650px);margin-top:26px}
+.starter-card{border:1px solid var(--border);border-radius:14px;background:rgba(255,255,255,.025);color:var(--txt2);font:inherit;text-align:left;padding:14px 15px;cursor:pointer;transition:.2s;min-height:70px}
+.starter-card:hover{border-color:rgba(0,212,255,.28);background:rgba(0,212,255,.04);color:var(--txt)}
+.starter-card strong{display:block;color:var(--txt);font-size:13px;margin-bottom:4px}
+.starter-card span{font-size:12px;line-height:1.45;color:var(--muted)}
+.inp-area{width:min(100%,900px);margin:0 auto;padding:10px 22px 18px;border-top:0;position:relative}
+.inp-wrap{border-radius:24px;padding:9px 9px 9px 10px;background:#111b29;box-shadow:0 10px 35px rgba(0,0,0,.2)}
+.composer-add{width:36px;height:36px;border:0;border-radius:50%;background:transparent;color:var(--txt2);font-size:24px;line-height:1;cursor:pointer;flex-shrink:0}
+.composer-add:hover,.composer-add.on{background:var(--surf3);color:var(--txt)}
+.inp{font-size:15px;padding:7px 2px}
+.send{border-radius:50%;border:0;background:var(--txt);color:#071120;width:36px;height:36px}
+.send:hover:not(:disabled){background:white;box-shadow:none}
+.composer-foot{display:flex;align-items:center;justify-content:center;gap:8px;margin-top:8px;color:var(--muted);font-size:10.5px;text-align:center}
+.composer-tools{position:absolute;left:22px;bottom:78px;width:min(390px,calc(100vw - 44px));max-height:65vh;overflow:auto;background:#111a27;border:1px solid var(--border);border-radius:16px;padding:10px;box-shadow:0 24px 65px rgba(0,0,0,.55);z-index:250}
+.tool-action{display:flex;align-items:center;gap:10px;width:100%;border:0;border-radius:10px;background:transparent;color:var(--txt2);font:inherit;text-align:left;padding:10px;cursor:pointer}
+.tool-action:hover{background:var(--surf2);color:var(--txt)}
+.tool-action span:last-child{margin-left:auto;color:var(--muted);font-size:11px}
+.tool-settings{border-top:1px solid var(--border);margin-top:6px;padding:10px 8px 2px}
+.tool-settings .ctrl-grp{margin-bottom:10px}
+.tool-prompt-library{border-top:1px solid var(--border);margin-top:7px;padding-top:9px}
+.tool-prompt-library .p-grid{grid-template-columns:1fr}
+.knowledge-backdrop{position:fixed;inset:0;z-index:500;background:rgba(0,0,0,.62);display:flex;align-items:center;justify-content:center;padding:20px;backdrop-filter:blur(8px)}
+.knowledge-modal{width:min(620px,100%);max-height:min(760px,calc(100vh - 40px));display:flex;flex-direction:column;background:#0b1421;border:1px solid var(--border);border-radius:20px;box-shadow:0 28px 90px rgba(0,0,0,.65);overflow:hidden}
+.knowledge-head{display:flex;align-items:flex-start;justify-content:space-between;padding:20px 22px 16px;border-bottom:1px solid var(--border)}
+.knowledge-head h2{font-size:18px;margin-bottom:3px}
+.knowledge-head p{font-size:12px;color:var(--muted);max-width:430px}
+.modal-close{width:32px;height:32px;border:0;border-radius:9px;background:var(--surf2);color:var(--txt2);cursor:pointer}
+.knowledge-body{padding:18px 22px;overflow:auto}
+.knowledge-add{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:14px;border:1px solid var(--border);border-radius:14px;background:var(--surf2);margin-bottom:16px}
+.knowledge-add strong{display:block;font-size:13px;margin-bottom:3px}.knowledge-add span{font-size:11px;color:var(--muted)}
+.knowledge-upload{border:0;border-radius:10px;background:var(--cyan);color:#03101a;font:inherit;font-weight:700;padding:9px 13px;white-space:nowrap;cursor:pointer}
+.knowledge-upload:disabled{opacity:.5;cursor:not-allowed}
+.knowledge-list{display:flex;flex-direction:column;gap:7px}
+.knowledge-source{display:flex;align-items:center;gap:10px;border:1px solid var(--border);border-radius:11px;padding:10px 12px;background:rgba(255,255,255,.02)}
+.knowledge-source .f-ico{font-size:18px}.knowledge-source-name{min-width:0;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:13px}.knowledge-source-type{font-size:10px;color:var(--muted);text-transform:uppercase}
+.knowledge-empty{padding:28px 14px;text-align:center;color:var(--muted);font-size:13px}
+.knowledge-note{font-size:11px;color:var(--muted);line-height:1.5;margin-top:14px}
+.modal-indexing{display:flex;align-items:center;gap:9px;padding:10px 12px;border-radius:10px;background:rgba(0,212,255,.06);color:var(--cyan);font-size:12px;margin-bottom:12px}
+
+@media (max-width:900px){
+  .mobile-menu{display:inline-flex}
+  .logo{gap:7px}
+  .workspace{display:block;min-height:0}
+  .panel-l{display:flex;position:fixed;z-index:410;left:0;top:56px;bottom:0;width:280px;transform:translateX(-102%);transition:transform .22s;box-shadow:24px 0 55px rgba(0,0,0,.55)}
+  .panel-l.open{transform:translateX(0)}
+  .panel-c{height:calc(100vh - 56px);min-height:0}
+  .panel-r.open{top:56px;width:min(360px,100vw)}
+  .chat-head{padding:0 13px}
+}
+@media (max-width:600px){
+  html,body{height:100%;min-height:0;overflow:hidden}
+  body{display:flex}
+  .topbar-right .pill{display:none}
+  .panel-c{width:100%;height:calc(100vh - 56px);overflow:hidden}
+  .chat-actions{display:none}
+  .msgs{min-height:0;max-height:none;padding:20px 12px 12px}
+  .msg-u .bubble{max-width:92%}
+  .chat-actions .icon-button span{display:none}
+  .starter-grid{grid-template-columns:1fr}
+  .starter-card:nth-child(n+4){display:none}
+  .empty{max-width:100%;padding:32px 14px 20px;overflow:hidden}
+  .empty-sub{max-width:100%}
+  .empty-title{font-size:24px}
+  .inp-area{width:100%;max-width:100%;padding:8px 10px 12px}
+  .composer-tools{left:10px;bottom:72px}
+  .knowledge-add{align-items:flex-start;flex-direction:column}
+  .knowledge-upload{width:100%}
+}
 </style>
 </head>
 
@@ -342,19 +450,14 @@ body{display:flex;flex-direction:column;position:relative;z-index:1}
 <!-- ══ Topbar ════════════════════════════════════════════════════════════ -->
 <header class="topbar">
   <div class="logo">
+    <button class="mobile-menu" type="button" aria-label="Open navigation" :aria-expanded="navOpen" @click="navOpen=!navOpen">☰</button>
     <div class="logo-hex">⬡</div>
-    <div class="logo-name">NEXUS <span>INTELLIGENCE</span></div>
+    <div class="logo-name">NEXUS <span>AI</span></div>
   </div>
   <div class="topbar-right">
     <div class="pill" :class="{ready: statusReady}">
       <span class="pill-dot"></span>
       <span x-text="statusText"></span>
-    </div>
-    <div class="pill">
-      <span x-text="chatHistory.filter(m=>m.role==='assistant').length"></span>&nbsp;answers
-    </div>
-    <div class="pill">
-      <span x-text="notes.length"></span>&nbsp;notes
     </div>
   </div>
 </header>
@@ -362,155 +465,67 @@ body{display:flex;flex-direction:column;position:relative;z-index:1}
 <!-- ══ Workspace ══════════════════════════════════════════════════════════ -->
 <div class="workspace">
 
-  <!-- ── LEFT: Sources ─────────────────────────────────────────────────── -->
-  <aside class="panel panel-l">
-    <div class="p-head"><span class="p-label">SOURCES</span></div>
-
-    <div style="padding:12px 16px">
-      <label for="workspace-select" class="p-label">WORKSPACE</label>
-      <select id="workspace-select" class="sel" style="width:100%;margin-top:6px"
-              :value="workspaceId" @change="switchWorkspace($event.target.value)"
-              :disabled="!canSelectWorkspace || busy">
-        <template x-for="workspace in workspaces" :key="workspace"><option :value="workspace" x-text="workspace"></option></template>
-      </select>
-    </div>
-    <!-- Upload -->
-    <div class="upload" :class="{over:dragging}"
-         @dragover.prevent="dragging=true"
-         @dragleave.prevent="dragging=false"
-         @drop.prevent="onDrop($event)">
-      <input type="file" id="fi" multiple style="display:none"
-             accept=".pdf,.pptx,.xlsx,.xlsm,.csv,.tsv,.txt,.md,.json,.jpg,.jpeg,.png,.tiff,.tif,.bmp,.webp"
-             @change="onFileInput($event)">
-      <div class="upload-ico">⬆</div>
-      <div class="upload-txt">Drop files or <button type="button" class="upload-lnk" style="background:none;border:0;font:inherit" @click="document.getElementById('fi').click()">browse</button></div>
-      <div class="upload-sub">PDF · PPTX · Excel · CSV · JSON · Images (OCR)</div>
-    </div>
-
-    <!-- File list -->
-    <div class="file-list" x-show="files.length>0">
-      <template x-for="f in files" :key="f.name">
-        <div class="file-row">
-          <span class="f-ico" x-text="fIcon(f.ext)"></span>
-          <span style="flex:1;font-size:12px;" x-text="f.name"></span>
-        </div>
-      </template>
-    </div>
-
-    <!-- Indexing -->
-    <div class="indexing" x-show="indexing">
-      <div class="spin"></div>
-      <span x-text="ingestionStage"></span>
-      <button type="button" class="cancel-job" x-show="ingestionJob" @click="cancelIngestion()">Cancel</button>
-    </div>
-
-    <div class="div"></div>
-
-    <!-- Answer Controls -->
-    <div class="ctrl">
-      <div class="ctrl-lbl">Answer Controls</div>
-      <div class="ctrl-grp">
-        <label class="ctrl-sub">Mode</label>
-        <select class="sel" x-model="cfg.mode">
-          <option>Auto</option>
-          <option>Executive Brief</option>
-          <option>Analyst Deep Dive</option>
-          <option>Comparison Matrix</option>
-          <option>Action Plan</option>
-          <option>Risk Review</option>
-          <option>Data Highlights</option>
-          <option>Research Synthesis</option>
-        </select>
-      </div>
-      <div class="ctrl-grp">
-        <label class="ctrl-sub">Audience</label>
-        <select class="sel" x-model="cfg.audience">
-          <option>General</option>
-          <option>Leadership</option>
-          <option>Analyst</option>
-          <option>Product</option>
-          <option>Operations</option>
-          <option>Sales</option>
-        </select>
-      </div>
-      <div class="ctrl-grp">
-        <label class="ctrl-sub">Depth</label>
-        <div class="depth-row">
-          <template x-for="lv in ['Fast','Balanced','Comprehensive']" :key="lv">
-            <button class="d-btn" :class="{on:cfg.depth===lv}" @click="cfg.depth=lv" x-text="lv"></button>
-          </template>
-        </div>
-      </div>
-    </div>
-
-    <div class="div"></div>
-
-    <!-- LLM Provider -->
-    <div class="ctrl">
-      <div class="ctrl-lbl">LLM Provider</div>
-      <div class="prov-row">
-        <button class="p-btn" :class="{on:cfg.provider==='gemini'}" :aria-pressed="cfg.provider==='gemini'" :disabled="busy" @click="setProvider('gemini')">🤖 Gemini</button>
-        <button class="p-btn" :class="{on:cfg.provider==='ollama'}" :aria-pressed="cfg.provider==='ollama'" :disabled="busy" @click="setProvider('ollama')">🦙 Ollama</button>
-      </div>
-    </div>
-
-    <div class="div"></div>
-
-    <!-- Web Search -->
-    <button class="web-btn" :class="{on:cfg.web}" @click="cfg.web=!cfg.web">
-      <span>🌐</span>
-      <span x-text="cfg.web ? 'Web Search: ON' : 'Web Search: OFF'"></span>
+  <!-- ── LEFT: Navigation ───────────────────────────────────────────────── -->
+  <aside class="panel panel-l" :class="{open:navOpen}">
+    <button class="sidebar-new" type="button" :disabled="busy" @click="newConversation();navOpen=false">
+      <span>＋</span><span>New chat</span>
     </button>
 
-    <!-- Suggested questions -->
-    <template x-if="questions.length>0">
-      <div>
-        <div class="div"></div>
-        <div class="ctrl">
-          <div class="ctrl-lbl">Suggested Questions</div>
-          <template x-for="q in questions" :key="q">
-            <button class="sug-btn" @click="send(q)" x-text="q"></button>
-          </template>
+    <div class="sidebar-search">
+      <span>⌕</span>
+      <input type="search" aria-label="Search conversations" placeholder="Search chats" x-model="conversationSearch">
+    </div>
+
+    <nav class="sidebar-nav" aria-label="Workspace navigation">
+      <button class="nav-button" type="button" @click="knowledgeOpen=true;navOpen=false">
+        <span>▱</span><span>Knowledge Sources</span><span class="nav-count" x-text="files.length"></span>
+      </button>
+      <button class="nav-button" type="button" :class="{active:cfg.web}" @click="cfg.web=!cfg.web">
+        <span>◎</span><span>Web search</span><span class="nav-count" x-text="cfg.web?'On':'Off'"></span>
+      </button>
+      <button class="nav-button" type="button" @click="studioOpen=true;navOpen=false">
+        <span>◇</span><span>Memory & notes</span><span class="nav-count" x-text="memories.length+notes.length"></span>
+      </button>
+    </nav>
+
+    <div class="sidebar-section-label">Chats</div>
+    <div class="conversation-list">
+      <template x-for="thread in filteredConversations" :key="thread.conversation_id">
+        <div class="conversation-row" :class="{active:conversationId===thread.conversation_id}">
+          <button class="conversation-open" type="button" :title="thread.title" @click="openConversation(thread.conversation_id);navOpen=false" x-text="thread.title"></button>
+          <button class="conversation-delete" type="button" :aria-label="'Delete '+thread.title" @click.stop="deleteConversation(thread.conversation_id)">×</button>
         </div>
+      </template>
+      <div class="sidebar-empty" x-show="filteredConversations.length===0" x-text="conversationSearch?'No matching chats.':'Your conversations will appear here.'"></div>
+      <button class="nav-button" type="button" x-show="conversationNextBefore" :disabled="busy" @click="loadOlderConversation()"><span>↥</span><span>Load older messages</span></button>
+    </div>
+
+    <div class="sidebar-footer">
+      <div class="sidebar-workspace">
+        <span>◫</span>
+        <select id="workspace-select" class="sel" aria-label="Workspace"
+                :value="workspaceId" @change="switchWorkspace($event.target.value)"
+                :disabled="!canSelectWorkspace || busy">
+          <template x-for="workspace in workspaces" :key="workspace"><option :value="workspace" x-text="workspace"></option></template>
+        </select>
       </div>
-    </template>
+      <div class="provider-mini">
+        <button class="p-btn" :class="{on:cfg.provider==='gemini'}" :disabled="busy" @click="setProvider('gemini')">Gemini</button>
+        <button class="p-btn" :class="{on:cfg.provider==='ollama'}" :disabled="busy" @click="setProvider('ollama')">Ollama</button>
+      </div>
+    </div>
   </aside>
 
   <!-- ── CENTER: Chat ───────────────────────────────────────────────────── -->
   <main class="panel panel-c">
-    <div class="p-head">
-      <span class="p-label">CHAT</span>
-      <div class="thread-controls">
-        <select class="thread-select" aria-label="Conversation" :value="conversationId" :disabled="busy" @change="openConversation($event.target.value)">
-          <option value="">New conversation</option>
-          <template x-for="thread in conversations" :key="thread.conversation_id">
-            <option :value="thread.conversation_id" x-text="thread.title"></option>
-          </template>
-        </select>
-        <button class="thread-new" type="button" x-show="conversationNextBefore" :disabled="busy" @click="loadOlderConversation()">Older</button>
-        <button class="thread-new thread-delete" type="button" x-show="conversationId" :disabled="busy" @click="deleteConversation()">Delete</button>
-        <button class="thread-new" type="button" :disabled="busy" @click="newConversation()">New chat</button>
-        <button class="thread-new studio-toggle" type="button" :aria-expanded="studioOpen" aria-controls="studio-panel" @click="studioOpen=!studioOpen">Memory</button>
+    <div class="chat-head">
+      <div class="chat-title-wrap">
+        <div class="chat-kicker" x-text="workspaceId||'Workspace'"></div>
+        <div class="chat-title" x-text="currentConversationTitle"></div>
       </div>
-    </div>
-
-    <!-- Prompt Library -->
-    <div class="lib">
-      <button class="lib-toggle" @click="libOpen=!libOpen">
-        <span>Browse prompt library</span>
-        <span class="chev" :class="{r:libOpen}">▾</span>
-      </button>
-      <div class="lib-body" x-show="libOpen" x-transition>
-        <div class="cat-row">
-          <template x-for="c in cats" :key="c">
-            <button class="cat-tab" :class="{on:selCat===c}" @click="selCat=c" x-text="c"></button>
-          </template>
-        </div>
-        <div class="p-grid">
-          <template x-for="p in curPrompts" :key="p">
-            <button class="p-chip" @click="send(p); libOpen=false" x-text="p"></button>
-          </template>
-        </div>
+      <div class="chat-actions">
+        <button class="icon-button" type="button" @click="knowledgeOpen=true"><span>Knowledge</span> <b x-text="files.length"></b></button>
+        <button class="icon-button studio-toggle" type="button" :aria-expanded="studioOpen" aria-controls="studio-panel" @click="studioOpen=!studioOpen"><span>Memory</span> ◇</button>
       </div>
     </div>
 
@@ -519,8 +534,14 @@ body{display:flex;flex-direction:column;position:relative;z-index:1}
       <!-- Empty state -->
       <div class="empty" x-show="chatHistory.length===0&&!loading">
         <div class="empty-hex">⬡</div>
-        <div class="empty-title">Nexus Intelligence</div>
-        <div class="empty-sub">Upload documents or enable web search to begin your research session.</div>
+        <div class="empty-title">How can I help?</div>
+        <div class="empty-sub">Chat normally, search current web information, or ask grounded questions across connected SOP and SOW knowledge.</div>
+        <div class="starter-grid">
+          <button class="starter-card" type="button" @click="txt='Summarize the key obligations across our connected SOW documents.'"><strong>Summarize obligations</strong><span>Find deliverables, owners, and dates across SOWs.</span></button>
+          <button class="starter-card" type="button" @click="txt='Compare the connected SOP documents and identify conflicting procedures.'"><strong>Compare procedures</strong><span>Surface conflicts and cite supporting SOP sections.</span></button>
+          <button class="starter-card" type="button" @click="txt='Create an action plan from the relevant SOP and SOW requirements.'"><strong>Create an action plan</strong><span>Turn grounded requirements into clear next steps.</span></button>
+          <button class="starter-card" type="button" @click="cfg.web=true;txt='Research the latest information and cite current web sources.'"><strong>Research the web</strong><span>Enable current web evidence for this conversation.</span></button>
+        </div>
       </div>
 
       <template x-for="(m,i) in chatHistory" :key="i">
@@ -563,6 +584,9 @@ body{display:flex;flex-direction:column;position:relative;z-index:1}
             <template x-if="m.role==='assistant'&&m.retrieval?.reranker?.status==='fallback'">
               <div class="resp-meta" role="status">Reranker unavailable; sources shown in retrieval order.</div>
             </template>
+            <template x-if="m.role==='assistant'&&m.retrieval?.reason==='general_chat_no_sources'">
+              <div class="resp-meta" role="status">General model response · no workspace or web evidence used.</div>
+            </template>
             <template x-if="m.role==='assistant'&&m.evidenceStatus?.status==='possible_conflict'">
               <div class="resp-meta" role="status">Possible source conflict detected; compare cited evidence.</div>
             </template>
@@ -585,7 +609,6 @@ body{display:flex;flex-direction:column;position:relative;z-index:1}
     </div>
 
     <!-- Error -->
-    <div class="warn" role="status" x-show="uploadWarnings.length" x-text="uploadWarnings.join(' ')" aria-live="polite"></div>
     <div class="err" role="alert" x-show="err">
       <span x-text="err"></span>
       <button class="err-x" aria-label="Dismiss error" @click="err=null">✕</button>
@@ -593,9 +616,29 @@ body{display:flex;flex-direction:column;position:relative;z-index:1}
 
     <!-- Input -->
     <div class="inp-area">
+      <div class="composer-tools" x-show="toolsOpen" x-transition @click.outside="toolsOpen=false">
+        <button class="tool-action" type="button" @click="knowledgeOpen=true;toolsOpen=false"><b>▱</b><span>Manage knowledge sources</span><span x-text="files.length+' connected'"></span></button>
+        <button class="tool-action" type="button" @click="cfg.web=!cfg.web"><b>◎</b><span>Search the web</span><span x-text="cfg.web?'On':'Off'"></span></button>
+        <button class="tool-action" type="button" @click="libOpen=!libOpen"><b>✦</b><span>Prompt library</span><span x-text="libOpen?'Hide':'Browse'"></span></button>
+        <div class="tool-prompt-library" x-show="libOpen">
+          <div class="cat-row">
+            <template x-for="c in cats" :key="c"><button class="cat-tab" :class="{on:selCat===c}" @click="selCat=c" x-text="c"></button></template>
+          </div>
+          <div class="p-grid">
+            <template x-for="p in curPrompts" :key="p"><button class="p-chip" @click="txt=p;toolsOpen=false;libOpen=false" x-text="p"></button></template>
+          </div>
+        </div>
+        <div class="tool-settings">
+          <div class="ctrl-lbl">Response settings</div>
+          <div class="ctrl-grp"><label class="ctrl-sub">Mode</label><select class="sel" x-model="cfg.mode"><option>Auto</option><option>Executive Brief</option><option>Analyst Deep Dive</option><option>Comparison Matrix</option><option>Action Plan</option><option>Risk Review</option><option>Data Highlights</option><option>Research Synthesis</option></select></div>
+          <div class="ctrl-grp"><label class="ctrl-sub">Audience</label><select class="sel" x-model="cfg.audience"><option>General</option><option>Leadership</option><option>Analyst</option><option>Product</option><option>Operations</option><option>Sales</option></select></div>
+          <div class="ctrl-grp"><label class="ctrl-sub">Depth</label><div class="depth-row"><template x-for="lv in ['Fast','Balanced','Comprehensive']" :key="lv"><button class="d-btn" :class="{on:cfg.depth===lv}" @click="cfg.depth=lv" x-text="lv"></button></template></div></div>
+        </div>
+      </div>
       <div class="inp-wrap">
+        <button class="composer-add" :class="{on:toolsOpen}" type="button" aria-label="Open tools" :aria-expanded="toolsOpen" @click="toolsOpen=!toolsOpen">＋</button>
         <textarea class="inp" id="inp" rows="1"
-          placeholder="Ask anything about your documents…"
+          placeholder="Message Nexus"
           x-model="txt"
           @keydown.enter.prevent="if(!$event.shiftKey)send(txt)"
           @input="resize($event)"
@@ -606,6 +649,7 @@ body{display:flex;flex-direction:column;position:relative;z-index:1}
           </svg>
         </button>
       </div>
+      <div class="composer-foot"><span x-text="cfg.provider==='ollama'?'Local Ollama':'Gemini'"></span><span>·</span><span x-text="cfg.web?'Web on':(files.length?files.length+' knowledge source'+(files.length===1?'':'s'):'General chat')"></span><span>·</span><span>Verify important cited information.</span></div>
     </div>
   </main>
 
@@ -716,19 +760,56 @@ body{display:flex;flex-direction:column;position:relative;z-index:1}
 
 </div><!-- /workspace -->
 
+<!-- Knowledge ingestion is separate from chat; no drag/drop surface in conversations. -->
+<div class="knowledge-backdrop" x-show="knowledgeOpen" x-transition.opacity @click.self="knowledgeOpen=false" @keydown.escape.window="knowledgeOpen=false">
+  <section class="knowledge-modal" role="dialog" aria-modal="true" aria-labelledby="knowledge-title">
+    <div class="knowledge-head">
+      <div>
+        <h2 id="knowledge-title">Knowledge Sources</h2>
+        <p>Manage workspace SOPs, SOWs, policies, and data sources. Connected sources become available to every chat in this workspace.</p>
+      </div>
+      <button class="modal-close" type="button" aria-label="Close knowledge sources" @click="knowledgeOpen=false">×</button>
+    </div>
+    <div class="knowledge-body">
+      <input type="file" id="knowledge-file-input" multiple hidden
+             accept=".pdf,.pptx,.xlsx,.xlsm,.csv,.tsv,.txt,.md,.json,.jpg,.jpeg,.png,.tiff,.tif,.bmp,.webp"
+             @change="onFileInput($event);$event.target.value=''">
+      <div class="knowledge-add">
+        <div><strong>Add workspace knowledge</strong><span>PDF, PPTX, spreadsheets, text, JSON, and OCR images. New ingestion replaces current local corpus.</span></div>
+        <button class="knowledge-upload" type="button" :disabled="busy||indexing" @click="document.getElementById('knowledge-file-input').click()">Choose files</button>
+      </div>
+
+      <div class="modal-indexing" x-show="indexing">
+        <div class="spin"></div><span x-text="ingestionStage"></span>
+        <button type="button" class="cancel-job" x-show="ingestionJob" @click="cancelIngestion()">Cancel</button>
+      </div>
+      <div class="warn" role="status" x-show="uploadWarnings.length" x-text="uploadWarnings.join(' ')" aria-live="polite"></div>
+
+      <div class="sidebar-section-label" style="padding-left:0">Connected sources</div>
+      <div class="knowledge-list" x-show="files.length">
+        <template x-for="f in files" :key="f.name">
+          <div class="knowledge-source"><span class="f-ico" x-text="fIcon(f.ext)"></span><span class="knowledge-source-name" x-text="f.name"></span><span class="knowledge-source-type" x-text="f.ext"></span></div>
+        </template>
+      </div>
+      <div class="knowledge-empty" x-show="!files.length&&!indexing">No workspace knowledge connected yet. General chat remains available.</div>
+      <div class="knowledge-note">Connector registry comes next: SharePoint, Google Drive, OneDrive, S3, and other governed repositories should use per-user grants, sync cursors, revocation, and source-level citations.</div>
+    </div>
+  </section>
+</div>
+
 <script>
 function nexus() {
   return {
     // ── State ─────────────────────────────────────────────────────────────
     workspaceId: "", workspaces: [], canSelectWorkspace: false, canReview: false, switching: true, providerChanging: false,
-    files: [], dragging: false, indexing: false, uploadWarnings: [], ingestionJob: null, ingestionStage: 'Indexing documents…',
+    files: [], indexing: false, uploadWarnings: [], ingestionJob: null, ingestionStage: 'Indexing knowledge…',
     chatHistory: [], conversations: [], conversationId: '', conversationNextBefore: null, pendingSubmission: null, corpusVersion: null, txt: '', loading: false,
     srcKey: null,
     notes: [], memories: [], reviewQueue: [], lastRes: null, feedbackStatus: '', memoryStatus: '',
     questions: [],
     err: null,
-    statusText: 'Upload files to begin', statusReady: false,
-    libOpen: false, studioOpen: false, selCat: '', cats: [], lib: {},
+    statusText: 'Starting', statusReady: false,
+    libOpen: false, studioOpen: false, knowledgeOpen: false, toolsOpen: false, navOpen: false, conversationSearch: '', selCat: '', cats: [], lib: {},
     cfg: { mode:'Auto', audience:'General', depth:'Balanced', web:false, provider:'gemini' },
 
     // ── Init ──────────────────────────────────────────────────────────────
@@ -755,7 +836,7 @@ function nexus() {
       } catch(e) { this.err=e.message; }
     },
 
-    get busy() { return this.loading || this.indexing || this.switching || this.providerChanging; },
+    get busy() { return this.loading || this.switching || this.providerChanging; },
     apiFetch(url, options={}) {
       const headers = new Headers(options.headers || {});
       if (this.canSelectWorkspace && this.workspaceId) headers.set('X-Workspace-ID', this.workspaceId);
@@ -766,8 +847,9 @@ function nexus() {
       if (!r.ok) throw new Error(await this.apiError(r, 'Could not load workspace'));
       const s = await r.json();
       this.cfg.provider = s.provider;
-      this.statusReady = s.vectorstore_ready || s.tabular_ready;
-      this.statusText = this.statusReady ? 'Knowledge base ready' : 'Upload files to begin';
+      const hasKnowledge = s.vectorstore_ready || s.tabular_ready;
+      this.statusReady = true;
+      this.statusText = hasKnowledge ? 'Knowledge connected' : 'General chat ready';
       this.questions = s.suggested_questions || [];
       this.files = (s.sources || []).map(source => ({name: source.name, ext: source.name.split('.').pop().toLowerCase()}));
       this.uploadWarnings = s.warnings || [];
@@ -780,7 +862,7 @@ function nexus() {
         const active=((await jobsResponse.json()).jobs||[]).find(job=>['queued','running','cancel_requested'].includes(job.status));
         if(active && !this.indexing) this.resumeIngestion(active.job_id);
       }
-      if (s.legacy_index_detected) this.err='An older index was found. Re-upload the original files to use this workspace.';
+      if (s.legacy_index_detected) this.err='An older knowledge index was found. Reconnect the original source files.';
     },
     async refreshConversations(openLatest=false) {
       const r=await this.apiFetch('/api/conversations');
@@ -792,7 +874,7 @@ function nexus() {
       }
     },
     async openConversation(id) {
-      if(this.loading || this.indexing) return;
+      if(this.loading) return;
       if(!id) { this.newConversation(); return; }
       const r=await this.apiFetch('/api/conversations/'+encodeURIComponent(id));
       if(!r.ok) { this.err=await this.apiError(r, 'Could not open conversation'); return; }
@@ -824,16 +906,15 @@ function nexus() {
       this.chatHistory=[...this.conversationMessages(data.messages||[]),...this.chatHistory];
       this.conversationNextBefore=data.next_before_sequence||null;
     },
-    async deleteConversation() {
-      if(!this.conversationId || this.busy || !globalThis.confirm('Delete this conversation permanently?')) return;
-      const id=this.conversationId;
+    async deleteConversation(id=this.conversationId) {
+      if(!id || this.busy || !globalThis.confirm('Delete this conversation permanently?')) return;
       const r=await this.apiFetch('/api/conversations/'+encodeURIComponent(id),{method:'DELETE'});
       if(!r.ok) { this.err=await this.apiError(r, 'Could not delete conversation'); return; }
-      this.newConversation();
+      if(id===this.conversationId) this.newConversation();
       await this.refreshConversations();
     },
     newConversation() {
-      this.conversationId=''; this.conversationNextBefore=null; this.pendingSubmission=null; this.chatHistory=[]; this.lastRes=null; this.feedbackStatus=''; this.srcKey=null; this.err=null;
+      this.conversationId=''; this.conversationNextBefore=null; this.pendingSubmission=null; this.chatHistory=[]; this.lastRes=null; this.feedbackStatus=''; this.srcKey=null; this.err=null; this.toolsOpen=false;
     },
     async switchWorkspace(workspace) {
       if (this.busy || workspace === this.workspaceId || !this.workspaces.includes(workspace)) return;
@@ -841,7 +922,7 @@ function nexus() {
       this.workspaceId=workspace;
       this.chatHistory=[]; this.conversationId=''; this.conversationNextBefore=null; this.pendingSubmission=null; this.conversations=[]; this.notes=[]; this.memories=[]; this.reviewQueue=[]; this.lastRes=null; this.feedbackStatus=''; this.memoryStatus=''; this.srcKey=null;
       this.txt=''; this.files=[]; this.questions=[]; this.err=null; this.uploadWarnings=[];
-      this.statusReady=false; this.statusText='Loading workspace';
+      this.statusReady=false; this.statusText='Loading workspace'; this.knowledgeOpen=false; this.toolsOpen=false; this.navOpen=false;
       try {
         const access=await this.apiFetch('/api/workspaces');
         if(!access.ok) throw new Error(await this.apiError(access,'Could not load workspace access'));
@@ -856,12 +937,21 @@ function nexus() {
       return this.lib[this.selCat]?.prompts || [];
     },
 
+    get filteredConversations() {
+      const term=this.conversationSearch.trim().toLowerCase();
+      return term ? this.conversations.filter(thread=>(thread.title||'').toLowerCase().includes(term)) : this.conversations;
+    },
+
+    get currentConversationTitle() {
+      if(!this.conversationId) return 'New chat';
+      return this.conversations.find(thread=>thread.conversation_id===this.conversationId)?.title || 'Conversation';
+    },
+
     // ── File handling ─────────────────────────────────────────────────────
     fIcon(ext) {
       const m={pdf:'📄',xlsx:'📊',xlsm:'📊',csv:'📊',tsv:'📊',pptx:'📑',txt:'📝',md:'📝',json:'🔧',jpg:'🖼',jpeg:'🖼',png:'🖼',tiff:'🖼',tif:'🖼',bmp:'🖼',webp:'🖼'};
       return m[ext]||'📄';
     },
-    onDrop(e) { this.dragging=false; if(e.dataTransfer.files.length) this.upload(e.dataTransfer.files); },
     onFileInput(e) { if(e.target.files.length) this.upload(e.target.files); },
 
     jobStage(job) {
@@ -897,7 +987,7 @@ function nexus() {
     },
 
     async upload(fileList) {
-      if (this.busy) return;
+      if (this.busy || this.indexing) return;
       this.indexing=true; this.err=null; this.uploadWarnings=[];
       const fd=new FormData();
       const infos=[];
@@ -917,12 +1007,12 @@ function nexus() {
         this.files = infos;
         this.questions = d.questions||[];
         this.uploadWarnings = d.warnings||[];
-        this.statusReady=true; this.statusText='Knowledge base ready';
+        this.statusReady=true; this.statusText='Knowledge connected';
         this.corpusVersion=d.corpus_version;
         for(const m of this.chatHistory) if(m.role==='assistant'&&m.corpusVersion&&m.corpusVersion!==this.corpusVersion) m.stale=true;
         this.lastRes=null; this.feedbackStatus=''; this.srcKey=null;
       } catch(e){ this.err=e.message; }
-      finally{ this.indexing=false; this.ingestionJob=null; this.ingestionStage='Indexing documents…'; }
+      finally{ this.indexing=false; this.ingestionJob=null; this.ingestionStage='Indexing knowledge…'; }
     },
 
     // ── Chat ──────────────────────────────────────────────────────────────
@@ -930,10 +1020,6 @@ function nexus() {
       if(!q?.trim()||this.busy) return;
       this.txt=''; this.err=null; this.feedbackStatus='';
       const el=document.getElementById('inp'); if(el){el.style.height='auto';}
-
-      if(!this.statusReady && !this.cfg.web) {
-        this.err='Upload at least one file, or enable Web Search to ask questions.'; return;
-      }
 
       this.chatHistory.push({role:'user',content:q});
       this.loading=true;

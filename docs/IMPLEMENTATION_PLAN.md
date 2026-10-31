@@ -1,6 +1,6 @@
 # RAG Architecture Implementation Plan
 
-**Status: Steps 0–18 have implemented local slices; adversarial memory evidence safety passes after prompt-boundary hardening, 31 October 2026.** See the linked result document in each step. The full baseline passes 200 offline tests and all seven stages; diagnostics show zero reproduced defects, 25 not reproduced, one passing rejection control, zero failed controls, and zero probe errors. Semantic preference adherence on `llama3.2:3b`, Step 12 release evidence, identity-provider deployment, PostgreSQL runtime validation, and production rollout remain incomplete. This plan translates the [architecture audit](../ARCHITECTURE_REVIEW.md) into reviewable steps; confirmed failures and untested attack hypotheses remain separate.
+**Status: Steps 0–19 have implemented local slices; chat-first UI and source-free general chat are implemented, 31 October 2026.** See the linked result document in each step. The full baseline passes 200 offline tests and all seven stages; diagnostics show zero reproduced defects, 25 not reproduced, one passing rejection control, zero failed controls, and zero probe errors. External connectors, streaming tool events, semantic preference adherence on `llama3.2:3b`, Step 12 release evidence, identity-provider deployment, PostgreSQL runtime validation, and production rollout remain incomplete. This plan translates the [architecture audit](../ARCHITECTURE_REVIEW.md) into reviewable steps; confirmed failures and untested attack hypotheses remain separate.
 
 ## Outcome and architecture decisions
 
@@ -283,6 +283,14 @@ Retain Flat as the reference. Benchmark HNSW when vector-search latency dominate
 
 **Measured model limitation:** preference/terminology adherence remained 0/3 on `llama3.2:3b`; combined score was 5/8. Do not weaken evidence precedence or add lossy output rewriting to force this metric. This is now a measured model/presentation gap for a later typed preference renderer or fine-tuning experiment.
 
+## Step 19 — Chat-first interface and separated knowledge management
+
+**Implemented locally:** ChatGPT-style observable interaction model with chat sidebar, focused conversation surface, composer tools, separate Knowledge Sources modal, source-free general chat, and explicit grounded/non-grounded response boundaries. See [Step 19 results](STEP19_RESULTS.md) and [assistant product architecture](ASSISTANT_PRODUCT_ARCHITECTURE.md).
+
+**Gate passed:** main chat has no drag/drop handlers; general chat works without a corpus and returns no citations; grounded routes remain unchanged when knowledge/web sources exist; desktop and 390 px mobile layouts have no horizontal overflow. Full baseline: 200 tests and all seven stages pass.
+
+**Next limitation:** local upload is still the ingestion transport behind Knowledge Sources. Build a connector registry and one governed read-only SOP/SOW connector before adding more visual similarity.
+
 ## Expansion after the foundation
 
 The requested general assistant is a separate product scope beyond document QA. Build observable capabilities and measure them; exact replication of a proprietary assistant's internals is not a verifiable requirement.
@@ -300,4 +308,4 @@ The requested general assistant is a separate product scope beyond document QA. 
 - **C — Steps 6–8:** durable conversations, observable retrieval/reranking, evidence-based answers. Demonstrate an end-to-end follow-up.
 - **D — Steps 9–11:** optional episodic recall, measured operations, migration/scale decisions. Demonstrate release evidence.
 
-**Next implementation action: keep fine-tuning paused until explicitly started; next model phase should compare a typed preference renderer against an Ollama fine-tune on a new frozen set. Infrastructure work can instead proceed with PostgreSQL staging when a test database exists.** Step 17/18 calibration sets and failed release-attempt sets are non-release evidence. Production rollout has not occurred. Multi-host runtime storage, identity-provider deployment, physical-device UI checks, multilingual OCR, cross-encoder deployment, and deployment-specific retention approval remain open.
+**Next implementation action: build a connector registry plus one read-only SOP/SOW source adapter with per-user grants, revocation, sync cursor, freshness, and citations. Keep fine-tuning paused until explicitly started.** Step 17/18 calibration sets and failed release-attempt sets are non-release evidence. Production rollout has not occurred. Multi-host runtime storage, identity-provider deployment, physical-device UI checks, multilingual OCR, cross-encoder deployment, and deployment-specific retention approval remain open.

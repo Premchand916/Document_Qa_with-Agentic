@@ -169,7 +169,12 @@ class WorkspaceApiTests(OfflineCase):
         self.assertEqual(client.post("/api/provider", headers=forged, json={"provider": "gemini"}).status_code, 403)
         self.assertEqual(client.post("/api/upload", headers=forged, files={"files": ("overwrite.txt", b"bad")}).status_code, 403)
         self.assertIn("alpha secret", client.post("/api/chat", headers=self.headers(), json={"query": "alpha"}).json()["response"])
-        self.assertEqual(client.post("/api/chat", headers=self.headers("bob", "beta"), json={"query": "alpha"}).status_code, 422)
+        with patch("agents.orchestrator_agent.invoke_orchestrator",
+                   return_value=SimpleNamespace(content="general answer")):
+            beta = client.post("/api/chat", headers=self.headers("bob", "beta"), json={"query": "alpha"})
+        self.assertEqual(beta.status_code, 200, beta.text)
+        self.assertEqual(beta.json()["documents"], [])
+        self.assertEqual(beta.json()["citations"], [])
 
     def test_provider_change_does_not_modify_environment_or_other_workspace(self):
         before = os.environ.get("LLM_PROVIDER")

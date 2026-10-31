@@ -9,13 +9,19 @@ class ApiAndGraphTests(OfflineCase):
     def test_conversation_ui_exposes_delete_pagination_and_mobile_layout(self):
         from app.server import STATIC_DIR
         html = (STATIC_DIR / "index.html").read_text()
-        self.assertIn("deleteConversation()", html)
+        self.assertIn("deleteConversation(", html)
         self.assertIn("loadOlderConversation()", html)
         self.assertIn("submitCorrection()", html)
         self.assertIn("waitForIngestion(jobId)", html)
         self.assertIn("cancelIngestion()", html)
         self.assertIn("@media (max-width:760px)", html)
         self.assertIn("Delete this conversation permanently?", html)
+        self.assertIn("Knowledge Sources", html)
+        self.assertIn("Message Nexus", html)
+        self.assertIn("conversation-list", html)
+        self.assertIn("General chat remains available", html)
+        self.assertNotIn("@drop.prevent", html)
+        self.assertNotIn("Drop files", html)
 
     def test_chat_before_startup_returns_service_unavailable(self):
         self.assertEqual(self.client().post("/api/chat", json={"query": "alpha"}).status_code, 503)
@@ -23,11 +29,19 @@ class ApiAndGraphTests(OfflineCase):
     def test_missing_query_returns_validation_error(self):
         self.assertEqual(self.client().post("/api/chat", json={}).status_code, 422)
 
-    def test_no_corpus_returns_actionable_error(self):
-        self.server._graph = SimpleNamespace(invoke=lambda state: self.fail("Must not run"))
-        response = self.client().post("/api/chat", json={"query": "alpha"})
-        self.assertEqual(response.status_code, 422)
-        self.assertIn("Upload", response.json()["detail"])
+    def test_no_corpus_uses_general_chat_without_claiming_evidence(self):
+        self.server._graph = SimpleNamespace(invoke=lambda state: self.fail("Graph must not run"))
+        with patch("agents.orchestrator_agent.invoke_orchestrator",
+                   return_value=SimpleNamespace(content="General answer")) as model:
+            response = self.client().post("/api/chat", json={"query": "Explain bounded queues"})
+        self.assertEqual(response.status_code, 200, response.text)
+        payload = response.json()
+        self.assertEqual(payload["response"], "General answer")
+        self.assertEqual(payload["source"], "Model knowledge")
+        self.assertEqual(payload["documents"], [])
+        self.assertEqual(payload["citations"], [])
+        self.assertEqual(payload["retrieval_status"]["reason"], "general_chat_no_sources")
+        self.assertIn("Do not claim to have read an SOP", model.call_args.args[0])
 
     def test_invalid_provider_does_not_change_active_provider(self):
         client = self.client()
