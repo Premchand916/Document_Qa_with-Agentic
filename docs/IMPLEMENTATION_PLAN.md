@@ -1,6 +1,6 @@
 # RAG Architecture Implementation Plan
 
-**Status: Steps 0–17 have implemented local slices; paired Ollama memory evaluation passes as development evidence, 31 October 2026.** See the linked result document in each step. The full baseline passes 198 offline tests and all seven stages; diagnostics show zero reproduced defects, 25 not reproduced, one passing rejection control, zero failed controls, and zero probe errors. Step 12 release evidence, identity-provider deployment, PostgreSQL runtime validation, and production rollout remain incomplete. This plan translates the [architecture audit](../ARCHITECTURE_REVIEW.md) into reviewable steps; confirmed failures and untested attack hypotheses remain separate.
+**Status: Steps 0–18 have implemented local slices; adversarial memory evidence safety passes after prompt-boundary hardening, 31 October 2026.** See the linked result document in each step. The full baseline passes 200 offline tests and all seven stages; diagnostics show zero reproduced defects, 25 not reproduced, one passing rejection control, zero failed controls, and zero probe errors. Semantic preference adherence on `llama3.2:3b`, Step 12 release evidence, identity-provider deployment, PostgreSQL runtime validation, and production rollout remain incomplete. This plan translates the [architecture audit](../ARCHITECTURE_REVIEW.md) into reviewable steps; confirmed failures and untested attack hypotheses remain separate.
 
 ## Outcome and architecture decisions
 
@@ -275,6 +275,14 @@ Retain Flat as the reference. Benchmark HNSW when vector-search latency dominate
 
 **Boundary:** this three-case development set influenced prompt and evaluator fixes, so it is calibration evidence, not held-out release evidence and not a fine-tuning dataset. Fine-tuning remains paused.
 
+## Step 18 — Adversarial memory boundary and expanded calibration
+
+**Implemented locally:** digest-bound task/label pairing, recursive leakage checks, dynamic category metrics, eight expanded cases, evidence-after-memory prompt ordering, typed memory-use rules, and shared QA prompt hardening. See [Step 18 results](STEP18_RESULTS.md).
+
+**Safety gate passed after repair:** the exposed post-fix calibration reached evidence safety 1.0 across multiple conflicts, adversarial instructions, long context, Spanish conflict, and irrelevant sensitive profile data. Full baseline: 200 tests and all seven stages pass.
+
+**Measured model limitation:** preference/terminology adherence remained 0/3 on `llama3.2:3b`; combined score was 5/8. Do not weaken evidence precedence or add lossy output rewriting to force this metric. This is now a measured model/presentation gap for a later typed preference renderer or fine-tuning experiment.
+
 ## Expansion after the foundation
 
 The requested general assistant is a separate product scope beyond document QA. Build observable capabilities and measure them; exact replication of a proprietary assistant's internals is not a verifiable requirement.
@@ -292,4 +300,4 @@ The requested general assistant is a separate product scope beyond document QA. 
 - **C — Steps 6–8:** durable conversations, observable retrieval/reranking, evidence-based answers. Demonstrate an end-to-end follow-up.
 - **D — Steps 9–11:** optional episodic recall, measured operations, migration/scale decisions. Demonstrate release evidence.
 
-**Next implementation action: freeze a larger never-seen memory-quality candidate set and run it once, or build the PostgreSQL staging importer when a test database is available. Fine-tuning remains paused now.** The Step 17 calibration set and failed release-attempt sets are non-release evidence. Production rollout has not occurred. Multi-host runtime storage, identity-provider deployment, physical-device UI checks, multilingual OCR, cross-encoder deployment, and deployment-specific retention approval remain open.
+**Next implementation action: keep fine-tuning paused until explicitly started; next model phase should compare a typed preference renderer against an Ollama fine-tune on a new frozen set. Infrastructure work can instead proceed with PostgreSQL staging when a test database exists.** Step 17/18 calibration sets and failed release-attempt sets are non-release evidence. Production rollout has not occurred. Multi-host runtime storage, identity-provider deployment, physical-device UI checks, multilingual OCR, cross-encoder deployment, and deployment-specific retention approval remain open.

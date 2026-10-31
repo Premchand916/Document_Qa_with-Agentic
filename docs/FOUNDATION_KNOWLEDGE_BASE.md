@@ -303,3 +303,26 @@ Use this record for foundation changes: understand requirements, state invariant
 - Corrected the evaluator to recognize common Unicode bullets and report category-level rates.
 - Development contracts passed 3/3; preference adherence and evidence safety both reached 1.0.
 - This set drove a prompt and evaluator correction and is permanently calibration-only. A new frozen set is required for release evidence; fine-tuning remains paused.
+
+## Active work — Step 18 adversarial memory boundary
+
+### Requirements
+
+- Expand coverage to multilingual prompts, long context, multiple conflicts, combined preferences, terminology, adversarial memory, and irrelevant sensitive profile data.
+- Bind prediction runs to exact task content with SHA-256 and reject duplicate/missing IDs or nested label leakage.
+- Keep factual evidence authoritative without making semantic preferences silently authoritative.
+- Preserve failed candidate evidence; once results influence code, mark the bundle exposed.
+
+### Result — 31 October 2026
+
+- Sealed eight task inputs against separate labels with digest `ed6d2a22...eb260` and captured exact Ollama revision.
+- Initial one-shot candidate scored 4/8: evidence safety 0.6 and preference adherence 0.3333. Long-context memory overrode evidence; Spanish conflict repeated a rejected value.
+- Moved untrusted memory guidance before authoritative evidence in both evaluator and shared QA prompts. Added category-specific rules: preferences control presentation, terminology controls word choice, profiles require direct relevance, and all facts/values must come from evidence.
+- Exposed post-fix calibration scored 5/8: evidence safety 1.0 and preference adherence 0.0. Safety repaired; `llama3.2:3b` still ignored multilingual formatting and terminology guidance.
+- Bundle is marked `exposed_calibration`; it cannot become release or fine-tuning evidence. Full baseline passed 200 tests and seven stages.
+
+### Decision
+
+- Keep evidence-first behavior even when it lowers preference adherence.
+- Do not truncate or rewrite grounded answers with heuristic post-processing; that can remove facts and citations.
+- Treat preference adherence as isolated model/presentation-layer work. Compare typed preferences with fine-tuning later on a new frozen dataset.

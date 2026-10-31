@@ -26,6 +26,8 @@ class EvidenceContractTests(OfflineCase):
         prompt = model.call_args.args[0]
         self.assertIn("AUDIT_REQUIRED_SECTION", prompt)
         self.assertIn(document.metadata["evidence_id"], prompt)
+        self.assertLess(prompt.index("Structured task prompt"), prompt.index("Document Context"))
+        self.assertIn("Never repeat conflicting or irrelevant semantic memory", prompt)
         self.assertIn(f'[{document.metadata["evidence_id"]}]', result["response"])
         self.assertEqual(result["citations"][0]["corpus_version"], "version-1")
         self.assertEqual(result["result_status"], "answered")

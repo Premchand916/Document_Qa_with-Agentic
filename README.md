@@ -56,6 +56,9 @@ python3 -m tools.run_ollama_memory_evaluation \
   --score-output .baseline-results/memory-model-score.json
 ```
 
+Candidate bundles are digest-bound to their labels. Once a result changes prompts or scoring,
+mark that bundle `exposed_calibration`; never reuse it as release or fine-tuning evidence.
+
 ---
 
 ## 🏗️ Architecture Overview

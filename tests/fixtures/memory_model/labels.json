@@ -1,6 +1,7 @@
 {
   "schema_version": 1,
   "dataset_id": "docqa-memory-model-2026-10-v1",
+  "task_fixture_sha256": "7b29d5dac00adb958c936d608affca8e9a655b1254628c8458d4a92434bbcae9",
   "targets": {
     "memory_on_contract_rate": 1.0,
     "preference_adherence_rate": 1.0,

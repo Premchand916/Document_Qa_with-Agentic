@@ -90,6 +90,7 @@ class SemanticMemoryTests(OfflineCase):
         self.assertEqual(chat.status_code, 200, chat.text)
         self.assertIn("Concise bullets", invocations[-1]["prompt_query"])
         self.assertIn("not document evidence", invocations[-1]["prompt_query"])
+        self.assertIn("Determine every factual claim and value", invocations[-1]["prompt_query"])
         self.assertEqual(invocations[-1]["semantic_context"][0]["memory_id"], memory_id)
         self.assertEqual(chat.json()["documents"], [])
         self.assertEqual(chat.json()["citations"], [])

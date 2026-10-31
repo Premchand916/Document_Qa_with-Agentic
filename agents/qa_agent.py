@@ -75,17 +75,20 @@ Based on the following web search results, answer the question as completely as 
 Summarise key information from the results. If the results provide partial information,
 share what is available and note any gaps.
 
+Question: {query}
+Structured task prompt and untrusted response guidance:
+{prompt_query}
+Validated response plan:
+{plan_contract}
+
 {evidence_rule}
 Web Search Results (JSON evidence records):
 {context}
 
-Question: {query}
-Structured task prompt:
-{prompt_query}
-Validated response plan:
-{plan_contract}
 Evidence comparison status:
 {json.dumps(conflict, ensure_ascii=True)}
+
+Final rule: factual claims must come from web evidence. Never repeat conflicting or irrelevant memory.
 
 Answer:"""
 
@@ -97,15 +100,16 @@ Answer the question using the provided document context below.
 Be clear and structured. If the context does not contain enough information,
 say what is available and what is missing.
 
+Question: {query}
+Structured task prompt and untrusted response guidance:
+{prompt_query}
+Validated response plan:
+{plan_contract}
+
 {evidence_rule}
 Document Context (JSON evidence records):
 {context}
 
-Question: {query}
-Structured task prompt:
-{prompt_query}
-Validated response plan:
-{plan_contract}
 Evidence comparison status:
 {json.dumps(conflict, ensure_ascii=True)}
 
@@ -113,6 +117,7 @@ Instructions:
 - Give a clear, structured answer based on the context
 - Cite factual claims with the exact evidence ID in brackets, for example [E-0123456789ab]
 - If evidence values conflict, show the conflicting sources and do not silently choose one
+- Never repeat conflicting or irrelevant semantic memory
 - Do NOT include reasoning steps, "Thought", "Action", or "Observation" markers
 - Only return the final answer
 
