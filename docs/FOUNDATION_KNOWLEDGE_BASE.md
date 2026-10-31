@@ -285,3 +285,21 @@ Use this record for foundation changes: understand requirements, state invariant
 - Added private `0600` snapshot writer and copy-only SQLite backup rehearsal.
 - Full baseline passed 196 tests and seven stages.
 - PostgreSQL adapter/runtime switch remains blocked until a staging database and rollback policy exist.
+
+## Active work — Step 17 paired Ollama memory quality
+
+### Requirements
+
+- Run the same evidence question with semantic memory disabled and enabled.
+- Keep task inputs free of expected fragments, regexes, and pass thresholds; load labels only after inference.
+- Treat memory as untrusted guidance, never as factual evidence.
+- Measure preference adherence separately from evidence-conflict and irrelevant-memory safety.
+- Record the exact Ollama model revision, latency, and token use. Do not fine-tune during this phase.
+
+### Result — 31 October 2026
+
+- Added three paired cases covering safe style preference, conflicting remembered facts, and irrelevant profile memory.
+- `llama3.2:3b` returned a Unicode bullet for the style case, retained the 30-day evidence over conflicting 60-day memory, and did not leak the irrelevant color preference.
+- Corrected the evaluator to recognize common Unicode bullets and report category-level rates.
+- Development contracts passed 3/3; preference adherence and evidence safety both reached 1.0.
+- This set drove a prompt and evaluator correction and is permanently calibration-only. A new frozen set is required for release evidence; fine-tuning remains paused.

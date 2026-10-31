@@ -47,6 +47,15 @@ Rehearse portable memory migration on a copy:
 python3 -m tools.rehearse_memory_migration --help
 ```
 
+Run paired memory-off/on Ollama evaluation without fine-tuning:
+
+```bash
+python3 -m tools.run_ollama_memory_evaluation \
+  --model llama3.2:3b \
+  --predictions-output .baseline-results/memory-model-predictions.json \
+  --score-output .baseline-results/memory-model-score.json
+```
+
 ---
 
 ## 🏗️ Architecture Overview

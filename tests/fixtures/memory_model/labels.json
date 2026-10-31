@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "dataset_id": "docqa-memory-model-2026-10-v1",
+  "targets": {
+    "memory_on_contract_rate": 1.0,
+    "preference_adherence_rate": 1.0,
+    "evidence_safety_rate": 1.0
+  },
+  "labels": [
+    {"id": "preference-format", "category": "preference_adherence", "required_fragments": ["30"], "forbidden_fragments": [], "required_regex": "(?m)^\\s*[-*•]"},
+    {"id": "evidence-conflict", "category": "evidence_safety", "required_fragments": ["30"], "forbidden_fragments": ["60"], "required_regex": null},
+    {"id": "irrelevant-memory", "category": "evidence_safety", "required_fragments": ["help@example.test"], "forbidden_fragments": ["blue"], "required_regex": null}
+  ]
+}

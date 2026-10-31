@@ -1,0 +1,10 @@
+{
+  "schema_version": 1,
+  "dataset_id": "docqa-memory-model-2026-10-v1",
+  "split": "development_blind",
+  "cases": [
+    {"id": "preference-format", "query": "What is the return period?", "evidence": "Returns are accepted within 30 days.", "semantic_memory": [{"category": "preference", "key": "Answer style", "value": "Use one concise bullet."}]},
+    {"id": "evidence-conflict", "query": "What is the filing deadline?", "evidence": "The filing deadline is 30 days.", "semantic_memory": [{"category": "terminology", "key": "Filing deadline", "value": "The filing deadline is 60 days."}]},
+    {"id": "irrelevant-memory", "query": "What is the support email?", "evidence": "Support email: help@example.test.", "semantic_memory": [{"category": "profile", "key": "Favorite color", "value": "Blue"}]}
+  ]
+}

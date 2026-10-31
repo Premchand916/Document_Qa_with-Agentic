@@ -1,6 +1,6 @@
 # RAG Architecture Implementation Plan
 
-**Status: Steps 0–16 have implemented local slices; portable memory migration contract passes, 28 October 2026.** See the linked result document in each step. The full baseline passes 196 offline tests and all seven stages; diagnostics show zero reproduced defects, 25 not reproduced, one passing rejection control, zero failed controls, and zero probe errors. Step 12 release evidence, identity-provider deployment, PostgreSQL runtime validation, and production rollout remain incomplete. This plan translates the [architecture audit](../ARCHITECTURE_REVIEW.md) into reviewable steps; confirmed failures and untested attack hypotheses remain separate.
+**Status: Steps 0–17 have implemented local slices; paired Ollama memory evaluation passes as development evidence, 31 October 2026.** See the linked result document in each step. The full baseline passes 198 offline tests and all seven stages; diagnostics show zero reproduced defects, 25 not reproduced, one passing rejection control, zero failed controls, and zero probe errors. Step 12 release evidence, identity-provider deployment, PostgreSQL runtime validation, and production rollout remain incomplete. This plan translates the [architecture audit](../ARCHITECTURE_REVIEW.md) into reviewable steps; confirmed failures and untested attack hypotheses remain separate.
 
 ## Outcome and architecture decisions
 
@@ -267,6 +267,14 @@ Retain Flat as the reference. Benchmark HNSW when vector-search latency dominate
 
 **Still external:** PostgreSQL adapter/importer, active-writer concurrency tests, staging database, encrypted backup storage, cutover, and rollback approval.
 
+## Step 17 — Paired Ollama memory-quality evaluation
+
+**Implemented locally:** label-blind paired memory-off/on inference, separate scoring labels, pinned Ollama model revision, latency/token capture, preference-adherence scoring, and evidence-safety scoring. See [Step 17 results](STEP17_RESULTS.md).
+
+**Development gate passed:** `llama3.2:3b` followed an explicit one-bullet preference, rejected conflicting remembered facts, and ignored irrelevant profile memory while answering from evidence. All three contracts and both category targets passed. Full baseline: 198 tests and all seven stages pass.
+
+**Boundary:** this three-case development set influenced prompt and evaluator fixes, so it is calibration evidence, not held-out release evidence and not a fine-tuning dataset. Fine-tuning remains paused.
+
 ## Expansion after the foundation
 
 The requested general assistant is a separate product scope beyond document QA. Build observable capabilities and measure them; exact replication of a proprietary assistant's internals is not a verifiable requirement.
@@ -284,4 +292,4 @@ The requested general assistant is a separate product scope beyond document QA. 
 - **C — Steps 6–8:** durable conversations, observable retrieval/reranking, evidence-based answers. Demonstrate an end-to-end follow-up.
 - **D — Steps 9–11:** optional episodic recall, measured operations, migration/scale decisions. Demonstrate release evidence.
 
-**Next implementation action: build a PostgreSQL staging importer only when a test database is available, or proceed to label-blind Ollama memory-quality evaluation without training. Fine-tuning remains paused now.** Exposed calibration and failed release-attempt sets are non-release evidence. Production rollout has not occurred. Multi-host runtime storage, identity-provider deployment, physical-device UI checks, multilingual OCR, cross-encoder deployment, and deployment-specific retention approval remain open.
+**Next implementation action: freeze a larger never-seen memory-quality candidate set and run it once, or build the PostgreSQL staging importer when a test database is available. Fine-tuning remains paused now.** The Step 17 calibration set and failed release-attempt sets are non-release evidence. Production rollout has not occurred. Multi-host runtime storage, identity-provider deployment, physical-device UI checks, multilingual OCR, cross-encoder deployment, and deployment-specific retention approval remain open.
