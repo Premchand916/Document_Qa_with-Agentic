@@ -350,4 +350,30 @@ Use this record for foundation changes: understand requirements, state invariant
 
 - Do not clone proprietary branding or claim reverse-engineered internals.
 - Separate chat, workspace knowledge, memory, tools, skills, and agents by authority and lifecycle.
-- Connector registry is next; visual similarity alone does not provide ChatGPT-like capability.
+- Capability and event kernel is next; skills, connectors, plugins, streaming, coding tools, and subagents must share its policy and audit contracts.
+
+## Architecture checkpoint — capability platform
+
+### Requirements
+
+- Distinguish tools, skills, plugins, connectors, agents, subagents, artifacts, and events by authority and lifecycle.
+- Reuse proven document ingestion, retrieval, citations, conversations, and memory instead of rewriting them.
+- Define canonical turn/item/event and capability-policy contracts before adding external services or execution tools.
+- Keep local Ollama behind the same tool, permission, approval, and evidence boundaries as any other model.
+- Treat public ChatGPT behavior and OpenAI contracts as design evidence, not proof of proprietary internals.
+
+### Result — 3 November 2026
+
+- Audited current repo against public project, skill, plugin, tool, event-stream, ChatKit, MCP auth, and plugin security contracts.
+- Confirmed 200 offline tests and all seven baseline stages still pass.
+- Classified current app as mature document intelligence with chat, not yet a general capability platform.
+- Defined target assistant kernel, domain contracts, package boundaries, security rules, and Steps 20–31 in `docs/CHATGPT_CAPABILITY_REVERSE_ENGINEERING.md`.
+- Changed next work from a standalone connector to Step 20 capability/event kernel, then skill runtime, then connector registry.
+
+### Decision
+
+- No big-bang rewrite.
+- No plugin, connector, shell, coding agent, or subagent execution before shared policy/event contracts exist.
+- Fine-tuning remains paused; it cannot repair missing capabilities, evidence, authorization, or execution boundaries.
+- Wispr Flow remains external dictation into the existing composer; no reviewed public embeddable API contract is assumed.
+- Native voice is outside this repository and Steps 20–31 until the separate authorized voice repository is supplied.

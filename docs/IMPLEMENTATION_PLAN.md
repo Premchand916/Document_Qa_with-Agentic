@@ -1,6 +1,6 @@
 # RAG Architecture Implementation Plan
 
-**Status: Steps 0–19 have implemented local slices; chat-first UI and source-free general chat are implemented, 31 October 2026.** See the linked result document in each step. The full baseline passes 200 offline tests and all seven stages; diagnostics show zero reproduced defects, 25 not reproduced, one passing rejection control, zero failed controls, and zero probe errors. External connectors, streaming tool events, semantic preference adherence on `llama3.2:3b`, Step 12 release evidence, identity-provider deployment, PostgreSQL runtime validation, and production rollout remain incomplete. This plan translates the [architecture audit](../ARCHITECTURE_REVIEW.md) into reviewable steps; confirmed failures and untested attack hypotheses remain separate.
+**Status: Steps 0–19 have implemented local slices; chat-first UI and source-free general chat are implemented. The architecture was re-audited on 3 November 2026.** See the linked result document in each step and the [capability reverse-engineering review](CHATGPT_CAPABILITY_REVERSE_ENGINEERING.md). The full baseline passes 200 offline tests and all seven stages; diagnostics show zero reproduced defects, 25 not reproduced, one passing rejection control, zero failed controls, and zero probe errors. External connectors, streaming tool events, real skill packages, plugins/MCP, coding sandbox, semantic preference adherence on `llama3.2:3b`, Step 12 release evidence, identity-provider deployment, PostgreSQL runtime validation, and production rollout remain incomplete. This plan translates the [architecture audit](../ARCHITECTURE_REVIEW.md) into reviewable steps; confirmed failures and untested attack hypotheses remain separate.
 
 ## Outcome and architecture decisions
 
@@ -301,6 +301,23 @@ The requested general assistant is a separate product scope beyond document QA. 
 4. **Coding assistant:** expose an isolated workspace with read/search/edit/test tools, diff review, command allowlists, resource limits, and audit logs. Start with one agent and deterministic task tests; add parallel coding workers only after merge/conflict handling and isolation tests pass.
 5. **Fine-tuning gate:** first collect consented, redacted task traces and held-out evaluations. Separate retrieval/tool failures from model failures. Fine-tune only when the measured gap is model behavior rather than missing evidence or broken tools, and compare against the unfine-tuned local Ollama baseline.
 
+## Steps 20–31 — capability-platform expansion
+
+The [capability reverse-engineering review](CHATGPT_CAPABILITY_REVERSE_ENGINEERING.md) defines contracts, security boundaries, package layout, acceptance gates, and evidence sources for this expansion. Delivery order is mandatory because later features depend on shared event, policy, and capability contracts.
+
+1. **Step 20 — capability and event kernel:** canonical capability, thread/turn/item/event, policy, replay, and cancellation contracts. Wrap current chat as a legacy capability and keep all 200 tests green.
+2. **Step 21 — versioned skill runtime:** repository-local `.agents/skills/`, strict metadata and path validation, digest locks, progressive loading, workspace enablement, and auditable activation.
+3. **Step 22 — connector registry:** per-user grants, sources, snapshots, cursors, ACL/freshness/revocation, and one read-only SOP/SOW connector.
+4. **Step 23 — streaming turns:** authorized SSE replay, message/tool progress, reconnect, and Stop semantics.
+5. **Step 24 — bounded tool loop:** typed tool schemas, budgets, idempotency, errors, and human approvals.
+6. **Step 25 — plugin/MCP gateway:** validated manifests, MCP discovery/calls, OAuth grant references, scope filtering, health, disable, revoke, and audit.
+7. **Step 26 — Work mode and artifacts:** durable generated documents, plans, tables, reports, code diffs, widgets, actions, revisions, and previews.
+8. **Step 27 — isolated coding assistant:** bounded filesystem/search/patch/shell/test tools with diff review, audit, cancellation, and cleanup.
+9. **Step 28 — controlled subagents:** scoped delegation, inherited policy, isolated budgets/writes, aggregation, conflict handling, and trace ownership.
+10. **Step 29 — research and live extraction:** safe search/fetch/extract, SSRF and injection controls, freshness, citations, and resumable research jobs.
+11. **Step 30 — multimodal/tasks:** image, scheduled tasks, background jobs, and notifications through the same kernel. Native voice stays in the separate later workstream.
+12. **Step 31 — production identity and scale:** OIDC, vault, PostgreSQL, workers, queues, object storage, quotas, backup/restore, and independent security review.
+
 ## Delivery checkpoints and next action
 
 - **A — Steps 0–2:** tests, API boundaries, isolated durable corpora. Demonstrate ownership and failed-save safety.
@@ -308,4 +325,6 @@ The requested general assistant is a separate product scope beyond document QA. 
 - **C — Steps 6–8:** durable conversations, observable retrieval/reranking, evidence-based answers. Demonstrate an end-to-end follow-up.
 - **D — Steps 9–11:** optional episodic recall, measured operations, migration/scale decisions. Demonstrate release evidence.
 
-**Next implementation action: build a connector registry plus one read-only SOP/SOW source adapter with per-user grants, revocation, sync cursor, freshness, and citations. Keep fine-tuning paused until explicitly started.** Step 17/18 calibration sets and failed release-attempt sets are non-release evidence. Production rollout has not occurred. Multi-host runtime storage, identity-provider deployment, physical-device UI checks, multilingual OCR, cross-encoder deployment, and deployment-specific retention approval remain open.
+**Next implementation action: Step 20, capability and event kernel.** Build canonical capability/event contracts, policy filtering, durable authorized replay, and cancellation state; wrap current chat execution without changing behavior. Then build versioned skills and the read-only SOP/SOW connector on that kernel. Keep fine-tuning paused until explicitly started. Step 17/18 calibration sets and failed release-attempt sets are non-release evidence. Production rollout has not occurred. Multi-host runtime storage, identity-provider deployment, physical-device UI checks, multilingual OCR, cross-encoder deployment, and deployment-specific retention approval remain open.
+
+Voice and Wispr boundary: no implementation exists in this repository. Wispr Flow is treated as external composer dictation unless supported vendor API documentation is supplied. Native voice is excluded from Steps 20–31 and will be planned against the separate authorized voice repository. See [evidence ledger](CHATGPT_SYSTEM_EVIDENCE_LEDGER.md).

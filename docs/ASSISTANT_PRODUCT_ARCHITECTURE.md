@@ -2,6 +2,10 @@
 
 Verified 31 October 2026. This document maps observable assistant-product patterns to Nexus; it does not claim access to ChatGPT source code, prompts, infrastructure, or proprietary internals.
 
+For the full capability inventory, clean-room public-source analysis, target contracts, skill/plugin/MCP design, coding runtime boundary, and Steps 20–31 roadmap, see [Nexus capability reverse engineering and target architecture](CHATGPT_CAPABILITY_REVERSE_ENGINEERING.md).
+
+Evidence classes, exact source pointers, falsifying checks, and voice/Wispr unknowns are recorded in [the system evidence ledger](CHATGPT_SYSTEM_EVIDENCE_LEDGER.md).
+
 ## Product model
 
 Official ChatGPT guidance describes projects as containers for related chats, files, instructions, and connected sources, while each chat keeps a focused transcript. Nexus adopts that observable separation:
@@ -70,11 +74,12 @@ Memory never becomes evidence. Semantic memory may guide presentation or termino
 
 ## Build order
 
-1. Connector registry and one read-only SOP/SOW connector with test identity and revocation.
-2. Source picker per workspace/chat plus freshness and permission metadata.
-3. Streaming response and durable tool-event model with cancellation.
-4. Artifact panel for generated plans, documents, tables, and code diffs.
-5. Bounded coding tools in an isolated workspace; one agent before parallel workers.
-6. New held-out evaluation covering general chat honesty, connector ACLs, freshness, citations, and tool failure recovery.
+1. Capability and event kernel with policy, durable replay, and cancellation state.
+2. Versioned skill runtime with progressive loading and audited workspace activation.
+3. Connector registry and one read-only SOP/SOW connector with test identity and revocation.
+4. Streaming response and durable tool-event model with cancellation.
+5. Plugin/MCP gateway with scopes, grants, health, and revocation.
+6. Artifact panel and bounded coding tools; one isolated agent before parallel workers.
+7. New held-out evaluation covering skill routing, plugin policy, connector ACLs, freshness, citations, and tool failure recovery.
 
 Fine-tuning remains separate. Retrieval, connector, permission, and interface failures must be fixed before model training is considered.

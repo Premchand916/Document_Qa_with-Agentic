@@ -23,6 +23,8 @@ This system enables users to upload documents (PDF, PPT, Excel, CSV, JSON, etc.)
 - 🛡️ Versioned code/operator-owned procedural guidance; no self-modifying procedures
 - 💬 Chat-first interface with durable conversations and source-free general chat
 - ▱ Separate workspace Knowledge Sources manager for SOP/SOW ingestion
+- 🧩 [Capability-platform architecture and Steps 20–31 roadmap](docs/CHATGPT_CAPABILITY_REVERSE_ENGINEERING.md)
+- 🔬 [Source evidence and architecture uncertainty ledger](docs/CHATGPT_SYSTEM_EVIDENCE_LEDGER.md)
 
 Validate the memory foundation without a model call:
 
