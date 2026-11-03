@@ -14,6 +14,7 @@ import sqlite3
 import time
 from uuid import uuid4
 
+from domain.events import EventType, validated_event_payload
 from storage.workspaces import workspace_key
 
 
@@ -89,6 +90,28 @@ class ConversationRepository:
                       REFERENCES conversations(workspace_id, principal_id, conversation_id));
                 CREATE INDEX IF NOT EXISTS conversations_retention
                     ON conversations(updated_at);
+                CREATE TABLE IF NOT EXISTS turn_events (
+                    workspace_id TEXT NOT NULL, principal_id TEXT NOT NULL,
+                    conversation_id TEXT NOT NULL, turn_id TEXT NOT NULL,
+                    sequence INTEGER NOT NULL, event_id TEXT NOT NULL,
+                    dedupe_key TEXT NOT NULL, event_type TEXT NOT NULL,
+                    payload_json TEXT NOT NULL, created_at INTEGER NOT NULL,
+                    PRIMARY KEY(workspace_id,principal_id,conversation_id,sequence),
+                    UNIQUE(workspace_id,principal_id,conversation_id,turn_id,event_id),
+                    UNIQUE(workspace_id,principal_id,conversation_id,turn_id,dedupe_key),
+                    FOREIGN KEY(workspace_id,principal_id,conversation_id,turn_id)
+                      REFERENCES turns(workspace_id,principal_id,conversation_id,idempotency_key)
+                      ON DELETE CASCADE);
+                CREATE INDEX IF NOT EXISTS turn_events_replay
+                    ON turn_events(workspace_id,principal_id,conversation_id,sequence);
+                CREATE TABLE IF NOT EXISTS turn_cancellations (
+                    workspace_id TEXT NOT NULL, principal_id TEXT NOT NULL,
+                    conversation_id TEXT NOT NULL, turn_id TEXT NOT NULL,
+                    requested_at INTEGER NOT NULL, cancelled_at INTEGER,
+                    PRIMARY KEY(workspace_id,principal_id,conversation_id,turn_id),
+                    FOREIGN KEY(workspace_id,principal_id,conversation_id,turn_id)
+                      REFERENCES turns(workspace_id,principal_id,conversation_id,idempotency_key)
+                      ON DELETE CASCADE);
             """)
             turn_columns = {row[1] for row in connection.execute("PRAGMA table_info(turns)")}
             if "lease_token" not in turn_columns:
@@ -98,6 +121,29 @@ class ConversationRepository:
             yield connection
         finally:
             connection.close()
+
+    @staticmethod
+    def _append_event(connection, workspace: str, principal: str, conversation_id: str,
+                      turn_id: str, event_type: EventType, payload: dict,
+                      dedupe_key: str, created_at: int) -> None:
+        safe_payload = validated_event_payload(payload)
+        encoded = json.dumps(safe_payload, ensure_ascii=False, allow_nan=False, separators=(",", ":"))
+        existing = connection.execute("""SELECT event_type,payload_json FROM turn_events
+            WHERE workspace_id=? AND principal_id=? AND conversation_id=? AND turn_id=?
+              AND dedupe_key=?""",
+            (workspace, principal, conversation_id, turn_id, dedupe_key)).fetchone()
+        if existing is not None:
+            if existing["event_type"] != event_type.value or existing["payload_json"] != encoded:
+                raise ConversationConflict()
+            return
+        sequence = connection.execute("""SELECT COALESCE(MAX(sequence),0)+1 FROM turn_events
+            WHERE workspace_id=? AND principal_id=? AND conversation_id=?""",
+            (workspace, principal, conversation_id)).fetchone()[0]
+        connection.execute("""INSERT INTO turn_events(
+            workspace_id,principal_id,conversation_id,turn_id,sequence,event_id,dedupe_key,
+            event_type,payload_json,created_at) VALUES (?,?,?,?,?,?,?,?,?,?)""",
+            (workspace, principal, conversation_id, turn_id, sequence, uuid4().hex, dedupe_key,
+             event_type.value, encoded, created_at))
 
     @staticmethod
     def _validate(workspace: str, principal: str, conversation_id: str | None = None) -> None:
@@ -205,10 +251,20 @@ class ConversationRepository:
                 if (existing["status"] == "running" and existing["lease_expires_at"] is not None and
                         existing["lease_expires_at"] > current_time):
                     raise ConversationConflict()
-            connection.execute("""UPDATE turns SET status='failed',lease_token=NULL,lease_expires_at=NULL
+            expired = connection.execute("""SELECT idempotency_key,lease_token FROM turns
                 WHERE workspace_id=? AND principal_id=? AND conversation_id=? AND status='running'
                   AND (lease_expires_at IS NULL OR lease_expires_at<=?)""",
-                (workspace, principal, identifier, current_time))
+                (workspace, principal, identifier, current_time)).fetchall()
+            for expired_turn in expired:
+                connection.execute("""UPDATE turns SET status='failed',lease_token=NULL,
+                    lease_expires_at=NULL WHERE workspace_id=? AND principal_id=?
+                    AND conversation_id=? AND idempotency_key=? AND status='running'""",
+                    (workspace, principal, identifier, expired_turn["idempotency_key"]))
+                self._append_event(
+                    connection, workspace, principal, identifier, expired_turn["idempotency_key"],
+                    EventType.TURN_FAILED, {"status": "failed", "reason": "lease_expired"},
+                    f"turn.failed:lease:{expired_turn['lease_token'] or 'missing'}", current_time,
+                )
             running = connection.execute("""SELECT 1 FROM turns
                 WHERE workspace_id=? AND principal_id=? AND conversation_id=? AND status='running'""",
                                          (workspace, principal, identifier)).fetchone()
@@ -229,6 +285,9 @@ class ConversationRepository:
                     WHERE workspace_id=? AND principal_id=?
                     AND conversation_id=? AND idempotency_key=?""",
                     (lease_token, lease_expires_at, workspace, principal, identifier, idempotency_key))
+            self._append_event(connection, workspace, principal, identifier, idempotency_key,
+                               EventType.TURN_STARTED, {"status": "running"},
+                               f"turn.started:{lease_token}", current_time)
             connection.execute("""UPDATE conversations SET updated_at=CURRENT_TIMESTAMP
                 WHERE workspace_id=? AND principal_id=? AND conversation_id=?""",
                 (workspace, principal, identifier))
@@ -253,6 +312,15 @@ class ConversationRepository:
             connection.execute("""UPDATE conversations SET updated_at=CURRENT_TIMESTAMP
                 WHERE workspace_id=? AND principal_id=? AND conversation_id=?""",
                 (workspace, principal, conversation_id))
+            self._append_event(connection, workspace, principal, conversation_id, idempotency_key,
+                               EventType.MESSAGE_COMPLETED,
+                               {"response": str(response.get("response", ""))[:8000],
+                                "result_status": response.get("result_status")},
+                               "message.completed", current_time)
+            self._append_event(connection, workspace, principal, conversation_id, idempotency_key,
+                               EventType.TURN_COMPLETED,
+                               {"status": "complete", "corpus_version": response.get("corpus_version")},
+                               "turn.completed", current_time)
             self._refresh_summary(connection, workspace, principal, conversation_id)
             connection.commit()
 
@@ -272,22 +340,40 @@ class ConversationRepository:
     def fail(self, workspace: str, principal: str, conversation_id: str,
              idempotency_key: str, lease_token: str) -> None:
         with self._connect() as connection:
-            connection.execute("""UPDATE turns SET status='failed',lease_token=NULL,lease_expires_at=NULL
+            connection.execute("BEGIN IMMEDIATE")
+            updated = connection.execute("""UPDATE turns SET status='failed',lease_token=NULL,lease_expires_at=NULL
                 WHERE workspace_id=? AND principal_id=? AND conversation_id=? AND idempotency_key=?
                   AND status='running' AND lease_token=?""",
                 (workspace, principal, conversation_id, idempotency_key, lease_token))
+            if updated.rowcount == 1:
+                self._append_event(connection, workspace, principal, conversation_id, idempotency_key,
+                                   EventType.TURN_FAILED, {"status": "failed"},
+                                   f"turn.failed:{lease_token}", int(time.time()))
             connection.commit()
 
     def recover_expired(self, *, now: int | None = None) -> int:
         """Release only expired leases; live turns owned by other workers remain valid."""
         current_time = int(time.time() if now is None else now)
         with self._connect() as connection:
-            updated = connection.execute("""UPDATE turns
-                SET status='failed',lease_token=NULL,lease_expires_at=NULL
-                WHERE status='running' AND (lease_expires_at IS NULL OR lease_expires_at<=?)""",
-                (current_time,))
+            connection.execute("BEGIN IMMEDIATE")
+            rows = connection.execute("""SELECT workspace_id,principal_id,conversation_id,
+                idempotency_key,lease_token FROM turns WHERE status='running'
+                AND (lease_expires_at IS NULL OR lease_expires_at<=?)""", (current_time,)).fetchall()
+            recovered = 0
+            for row in rows:
+                updated = connection.execute("""UPDATE turns SET status='failed',lease_token=NULL,
+                    lease_expires_at=NULL WHERE workspace_id=? AND principal_id=? AND conversation_id=?
+                    AND idempotency_key=? AND status='running'""",
+                    (row["workspace_id"], row["principal_id"], row["conversation_id"],
+                     row["idempotency_key"]))
+                if updated.rowcount == 1:
+                    recovered += 1
+                    self._append_event(connection, row["workspace_id"], row["principal_id"],
+                                       row["conversation_id"], row["idempotency_key"],
+                                       EventType.TURN_FAILED, {"status": "failed", "reason": "lease_expired"},
+                                       f"turn.failed:lease:{row['lease_token'] or 'missing'}", current_time)
             connection.commit()
-            return updated.rowcount
+            return recovered
 
     def recover_interrupted(self) -> int:
         """Backward-compatible alias with multi-worker-safe expiry semantics."""

@@ -50,6 +50,8 @@ from storage.conversations import ConversationRepository, ConversationConflict, 
 from storage.ingestion_jobs import (IngestionCancelled, IngestionCapacityError,
                                     IngestionJobConflict, IngestionJobNotFound,
                                     IngestionJobRepository)
+from runtime.events.repository import (EventConflict, EventStreamNotFound,
+                                       TurnEventRepository)
 
 STATIC_DIR = Path(__file__).parent / "static"
 
@@ -96,6 +98,10 @@ def get_conversation_repository() -> ConversationRepository:
         lease_seconds=configured_integer("DOCQA_TURN_LEASE_SECONDS", 60, 10, 3600),
         retention_days=configured_integer("DOCQA_CONVERSATION_RETENTION_DAYS", 90, 1, 3650),
     )
+
+
+def get_event_repository() -> TurnEventRepository:
+    return TurnEventRepository(Path(os.getenv("DOCQA_DATA_DIR") or faiss_store.DB_PATH))
 
 
 def get_episodic_repository() -> EpisodicMemoryRepository:
@@ -194,6 +200,16 @@ async def ingestion_job_conflict(request: Request, exc: IngestionJobConflict):
 @app.exception_handler(IngestionCapacityError)
 async def ingestion_capacity(request: Request, exc: IngestionCapacityError):
     return error_response(503, "ingestion_capacity", "Workspace ingestion capacity is full. Retry shortly.", request.state.request_id)
+
+
+@app.exception_handler(EventStreamNotFound)
+async def event_stream_not_found(request: Request, exc: EventStreamNotFound):
+    return error_response(404, "event_stream_not_found", "Conversation event stream was not found.", request.state.request_id)
+
+
+@app.exception_handler(EventConflict)
+async def event_conflict(request: Request, exc: EventConflict):
+    return error_response(409, "event_conflict", "Turn event state changed; refresh and retry.", request.state.request_id)
 
 
 _graph = None
@@ -753,6 +769,22 @@ async def get_conversation(conversation_id: str, request: Request,
     return await asyncio.to_thread(get_conversation_repository().get,
                                    context["workspace_id"], context["principal_id"], conversation_id,
                                    limit=limit, before_sequence=before_sequence)
+
+
+@app.get("/api/conversations/{conversation_id}/events")
+async def get_conversation_events(conversation_id: str, request: Request,
+                                  turn_id: str | None = Query(None, min_length=1, max_length=128),
+                                  after_sequence: int = Query(0, ge=0),
+                                  limit: int = Query(100, ge=1, le=500)):
+    if not re.fullmatch(r"[a-f0-9]{32}", conversation_id):
+        raise EventStreamNotFound()
+    context = request.state.request_context
+    events = await asyncio.to_thread(
+        get_event_repository().replay, context["workspace_id"], context["principal_id"],
+        conversation_id, turn_id=turn_id, after_sequence=after_sequence, limit=limit,
+    )
+    return {"conversation_id": conversation_id, "events": events,
+            "next_sequence": events[-1]["sequence"] if events else after_sequence}
 
 
 @app.delete("/api/conversations/{conversation_id}")

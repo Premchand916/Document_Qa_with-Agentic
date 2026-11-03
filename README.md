@@ -25,6 +25,8 @@ This system enables users to upload documents (PDF, PPT, Excel, CSV, JSON, etc.)
 - ▱ Separate workspace Knowledge Sources manager for SOP/SOW ingestion
 - 🧩 [Capability-platform architecture and Steps 20–31 roadmap](docs/CHATGPT_CAPABILITY_REVERSE_ENGINEERING.md)
 - 🔬 [Source evidence and architecture uncertainty ledger](docs/CHATGPT_SYSTEM_EVIDENCE_LEDGER.md)
+- 🧱 Capability registry, policy filter, durable turn events, cancellation state, and authorized replay
+- 🧭 [Compact build steering and restart checkpoint](STEERING.md)
 
 Validate the memory foundation without a model call:
 

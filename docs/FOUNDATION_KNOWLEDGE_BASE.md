@@ -377,3 +377,27 @@ Use this record for foundation changes: understand requirements, state invariant
 - Fine-tuning remains paused; it cannot repair missing capabilities, evidence, authorization, or execution boundaries.
 - Wispr Flow remains external dictation into the existing composer; no reviewed public embeddable API contract is assumed.
 - Native voice is outside this repository and Steps 20–31 until the separate authorized voice repository is supplied.
+
+## Active work — Step 20 capability and event kernel
+
+### Requirements
+
+- Define versioned capabilities without allowing definitions or skill text to grant authority.
+- Filter unavailable, unscoped, and disallowed-risk capabilities before future model exposure.
+- Persist safe observable lifecycle events atomically with authoritative turns.
+- Support authorized ordered replay, idempotency, restart recovery, deletion, and durable cancellation intent.
+
+### Result — 3 November 2026
+
+- Added capability/turn/event domain contracts, deterministic registry, registered legacy chat, and fail-closed policy decisions.
+- Added conversation-wide SQLite event ordering, per-turn deduplication, bounded sanitized payloads, and owner-scoped cursor replay API.
+- Integrated lifecycle events with turn reservation/completion/failure and expired-lease recovery transactions.
+- Added restart-safe cancellation intent and replayable cancellation-request events.
+- Added focused coverage for policy filtering, isolation, replay, idempotency, cancellation, recovery, deletion, and API behavior.
+- Full baseline verification and final count are recorded in `docs/STEP20_RESULTS.md`.
+
+### Decision
+
+- Step 21 skills may select or instruct only already-authorized capabilities; they cannot expand permissions.
+- SSE and enforced Stop remain Step 23. Tool iteration and approvals remain Step 24.
+- Continue from `STEERING.md` after context compaction; update it after each material build task.
