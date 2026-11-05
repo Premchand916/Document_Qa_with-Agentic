@@ -238,7 +238,7 @@ def create_orchestrator(provider=None):
     return _get_gemini_llm()
 
 
-def invoke_orchestrator(prompt, *, provider=None):
+def invoke_orchestrator(prompt, *, provider=None, json_mode: bool = False):
     provider = provider or get_active_provider()
     if provider not in ("gemini", "ollama"):
         raise LLMConfigurationError("Unknown model provider")
@@ -249,8 +249,9 @@ def invoke_orchestrator(prompt, *, provider=None):
     primary_model, base_url = _get_ollama_settings()
 
     try:
+        llm = _get_ollama_llm(primary_model, base_url)
         return _invoke_and_record(
-            _get_ollama_llm(primary_model, base_url), prompt,
+            llm.bind(format="json") if json_mode else llm, prompt,
             provider="ollama", model=primary_model,
         )
     except Exception as exc:
@@ -263,8 +264,9 @@ def invoke_orchestrator(prompt, *, provider=None):
     for candidate_model in _get_fallback_candidates(primary_model, base_url):
         attempted_models.append(candidate_model)
         try:
+            llm = _get_ollama_llm(candidate_model, base_url)
             response = _invoke_and_record(
-                _get_ollama_llm(candidate_model, base_url), prompt,
+                llm.bind(format="json") if json_mode else llm, prompt,
                 provider="ollama", model=candidate_model,
             )
         except Exception as fallback_exc:
@@ -280,3 +282,8 @@ def invoke_orchestrator(prompt, *, provider=None):
     raise OllamaModelMemoryError(
         _build_memory_error_message(primary_model, attempted_models)
     )
+
+
+def invoke_tool_planner(prompt, *, provider=None):
+    """Use Ollama JSON mode for strict tool actions; keep ordinary answers unchanged."""
+    return invoke_orchestrator(prompt, provider=provider, json_mode=True)

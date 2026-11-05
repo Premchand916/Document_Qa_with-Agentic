@@ -24,7 +24,7 @@ def build_default_registry() -> CapabilityRegistry:
             capability_id="math.evaluate",
             kind=CapabilityKind.TOOL,
             version="1.0.0",
-            description="Evaluate bounded arithmetic without running code.",
+            description="Evaluate numeric arithmetic only, such as '30 + 15'. Omit units, words, and code.",
             risk=RiskClass.READ,
             input_schema={"type": "object", "required": ["expression"],
                           "properties": {"expression": {"type": "string", "minLength": 1,

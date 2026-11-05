@@ -791,7 +791,7 @@ def _run_chat_graph(req: ChatRequest, context: dict, history: list[dict], conver
             try:
                 tool_run = ToolLoopRuntime(
                     build_default_registry(), get_event_repository(),
-                    orchestrator_agent.invoke_orchestrator,
+                    orchestrator_agent.invoke_tool_planner,
                 ).run(prompt_query, snapshot.provider, context["workspace_id"],
                       context["principal_id"], conversation_id, idempotency_key,
                       history=history, attempt_id=context.get("_turn_attempt"))
@@ -851,6 +851,12 @@ def _run_chat_graph(req: ChatRequest, context: dict, history: list[dict], conver
         "vectorstore": snapshot.vectorstore,
         "chat_history": history,
         "request_context": context,
+        "conversation_id": conversation_id,
+        "turn_id": idempotency_key,
+        "grounded_tool_runtime": (ToolLoopRuntime(
+            build_default_registry(), get_event_repository(),
+            orchestrator_agent.invoke_tool_planner,
+        ) if req.use_tools else None),
         "provider": snapshot.provider,
         "corpus_version": snapshot.version,
         "answer_mode": req.answer_mode,
@@ -896,7 +902,9 @@ def _run_chat_graph(req: ChatRequest, context: dict, history: list[dict], conver
         "evidence_status": result.get("evidence_status"),
         "response_plan": result.get("response_plan", {}),
         "result_status": result.get("result_status"),
-        "tool_result": result.get("tool_result"),
+        "tool_result": (None if result.get("result_status") == "citation_error" else
+                        result.get("builtin_tool_results") or result.get("tool_result")),
+        "tool_status": result.get("builtin_tool_status"),
         "skill": active_skill.public_contract() if active_skill else None,
         "connector_source_ids": used_connectors,
     }

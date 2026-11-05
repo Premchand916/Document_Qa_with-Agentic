@@ -30,10 +30,10 @@ This is the compact restart checkpoint. At the start of every build task, read t
 - Step 22 focused connector suite: 12 tests pass, including reupload composition, empty/failed publication, owner isolation, and ACL revocation.
 - Step 23: asynchronous chat turns, owner-scoped SSE replay and Last-Event-ID reconnect, bounded progress streaming, final validated answer retrieval, and atomic terminal Stop with an in-place turn-table migration.
 - Step 23 focused event suite: 11 tests pass, including legacy migration, asynchronous completion, and a Stop race against a blocked graph result.
-- Step 24 first local slice: opt-in general-chat tool loop with policy-filtered math/UTC tools, strict model actions, call/step/estimated-token/time limits, safe tool events, and explicit owner approval for semantic-preference writes.
-- Step 24 focused tool suite: 11 tests pass; isolated Chrome showed pending approval, approved state, and immediate Memory count refresh.
+- Step 24 local slice: opt-in general-chat tool loop with policy-filtered math/UTC tools, strict model actions, call/step/estimated-token/time limits, safe tool events, and explicit owner approval for semantic-preference writes. Grounded document/web arithmetic now uses evidence-bound operands through the existing QA/citation path; connector revocation redacts stored results.
+- Step 24 focused tool suite: 18 tests pass, including wrong-source citation rejection. Four synthetic `llama3.2:3b` local-model selection checks passed after JSON-mode and calculation-intent changes; isolated Chrome showed preference approval and a grounded calculation card with matching source/citation.
 - UI follow-up: higher-contrast chat shell; source-aware starter prompts; managed-source-first Knowledge Sources dialog with visible error/status states; connector provenance labels; keyboard composer newline; modal focus handling; mobile panel backdrop and responsive source form. Local-file import remains under a secondary disclosure.
-- Current full baseline: 245 tests and all seven stages pass.
+- Current full baseline: 253 tests and all seven stages pass.
 - Local API smoke: `/api/skills` and `/api/prompt-library` return 200 with locked skill metadata. Chrome UI checked at desktop and 393px mobile width; starter focus, multiline composer, modal open/Escape return, mobile navigation, and inline connector validation error observed. Step 23 Chrome check used isolated temporary data and a slow synthetic model: progress, Stop button, and durable “Stopped.” message were observed.
 
 ## Current files
@@ -55,7 +55,7 @@ This is the compact restart checkpoint. At the start of every build task, read t
 - Streamed progress is phase/tool status and a final validated answer; raw model token deltas need a provider streaming adapter and a safe verification protocol.
 - Stop prevents late publication but cannot forcibly interrupt an already running synchronous model thread; the deadline and chat-slot cap bound it.
 - SSE and background tasks use a single-host in-process worker and SQLite; multi-host delivery needs a shared queue and event store.
-- Step 24's model/tool loop runs only in opt-in general chat. Grounded document/web answers still use the evidence-validated graph; they must not be bypassed by a model-selected final action.
+- Grounded document/web tool selection is limited to one evidence-bound arithmetic call from six bounded excerpts. Numeric presence does not prove semantic operation choice; broader held-out Ollama quality and latency evaluation remains open. The existing graph, citations, and connector revocation checks still own the answer.
 - Token limits are exact only when a provider reports usage; otherwise they are estimated from text. The per-loop time check cannot abort a currently blocking provider call.
 - Preference writes are the only approved write executor. Additional writes and consequential actions need dedicated validation and approval contracts.
 - Managed-folder publication is synchronous; there is no remote SaaS connector, OAuth/vault integration, background connector scheduler, plugin/MCP call, shell execution, coding sandbox, or subagent yet.
@@ -65,7 +65,7 @@ This is the compact restart checkpoint. At the start of every build task, read t
 
 ## Exact next action
 
-Complete Step 24's grounded document/web tool integration through existing citations, source revocation, and evidence checks. Evaluate tool selection on local Ollama before adding plugin/MCP capabilities. Keep Ollama fine-tuning paused.
+Build a representative held-out Step 24 tool-selection evaluation for local Ollama operation choice, abstention, latency, and citation quality before Step 25 plugin/MCP capabilities. Keep Ollama fine-tuning paused.
 
 ## Verification commands
 

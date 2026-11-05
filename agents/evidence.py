@@ -69,6 +69,18 @@ def finalize_answer(state: dict) -> dict:
         cited = list(dict.fromkeys(document.metadata["evidence_id"] for document in documents))
         reviewed = " ".join(f"[{item}]" for item in cited)
         state["response"] = f"{response}\n\nEvidence reviewed: {reviewed}"
+    if not invalid:
+        for result in state.get("builtin_tool_results") or []:
+            value = str(result.get("value", ""))
+            required = set(result.get("evidence_ids") or [])
+            if value and required and re.search(
+                rf"(?<![\d.]){re.escape(value)}(?![\d.])", response,
+            ) and not required.issubset(cited):
+                invalid = sorted(required - set(cited))
+                state["response"] = "Answer could not be verified against the current evidence. Please retry."
+                state["result_status"] = "citation_error"
+                cited = []
+                break
     state["citations"] = [{"evidence_id": item, "source": evidence[item].metadata.get("source", "Unknown"),
                            "location": evidence[item].metadata.get("page", evidence[item].metadata.get("sheet")),
                            "origin": evidence[item].metadata.get("origin"),

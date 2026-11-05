@@ -2,6 +2,7 @@ from langgraph.graph import END, StateGraph
 
 from agents.dataframe_tool import dataframe_tool_agent
 from agents.evidence import finalize_answer
+from agents.grounded_tools import grounded_tools_agent
 from agents.planner_agent import planner_agent
 from agents.qa_agent import qa_agent
 from agents.response_planner import plan_response_strategy
@@ -33,6 +34,7 @@ def build_graph():
     # Entry passthrough node — routes to web search or document pipeline
     workflow.add_node("entry", lambda s: s)
     workflow.add_node("web_search", web_search_agent)
+    workflow.add_node("grounded_tools", grounded_tools_agent)
 
     # Document pipeline nodes
     workflow.add_node("response_planner", plan_response_strategy)
@@ -55,7 +57,7 @@ def build_graph():
     )
 
     # Web search → qa_agent → validated evidence result
-    workflow.add_edge("web_search", "qa_agent")
+    workflow.add_edge("web_search", "grounded_tools")
 
     # Document pipeline
     workflow.add_edge("response_planner", "planner")
@@ -69,7 +71,8 @@ def build_graph():
         },
     )
     workflow.add_edge("dataframe_tool", "finalize")
-    workflow.add_edge("retriever", "qa_agent")
+    workflow.add_edge("retriever", "grounded_tools")
+    workflow.add_edge("grounded_tools", "qa_agent")
     workflow.add_edge("knowledge_unavailable", "finalize")
     workflow.add_edge("qa_agent", "finalize")
     workflow.add_edge("finalize", END)

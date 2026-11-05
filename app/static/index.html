@@ -627,7 +627,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
               <div class="src-card tool-result-card" role="group" aria-label="Verified built-in tool results">
                 <div class="src-lbl">Built-in tool results</div>
                 <template x-for="(result,ri) in m.toolResults.filter(r=>r.value!==undefined)" :key="ri">
-                  <div class="src-summ"><span x-text="result.capability_id"></span><span>: </span><strong x-text="result.value"></strong></div>
+                  <div class="src-summ"><span x-text="result.capability_id"></span><span>: </span><strong x-text="result.value"></strong><span x-show="result.evidence_ids?.length" x-text="' · Evidence: '+(result.evidence_ids||[]).join(', ')"></span></div>
                 </template>
               </div>
             </template>
@@ -670,8 +670,11 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
             <template x-if="m.role==='assistant'&&m.retrieval?.reason==='general_chat_no_sources'&&!m.toolResults?.length">
               <div class="resp-meta" role="status">General model response · no workspace or web evidence used.</div>
             </template>
-            <template x-if="m.role==='assistant'&&m.toolResults?.some(r=>r.value!==undefined)">
+            <template x-if="m.role==='assistant'&&m.toolResults?.some(r=>r.value!==undefined)&&!m.citations?.length">
               <div class="resp-meta" role="status">Built-in result · no workspace or web sources used.</div>
+            </template>
+            <template x-if="m.role==='assistant'&&m.toolStatus?.status==='failed'">
+              <div class="resp-meta" role="status">Built-in calculation unavailable; answer uses available sources.</div>
             </template>
             <template x-if="m.role==='assistant'&&m.evidenceStatus?.status==='possible_conflict'">
               <div class="resp-meta" role="status">Possible source conflict detected; compare cited evidence.</div>
@@ -706,7 +709,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
       <div class="composer-tools" x-show="toolsOpen" x-transition @click.outside="toolsOpen=false">
         <button class="tool-action" type="button" @click="openKnowledge();toolsOpen=false"><b>▱</b><span>Manage knowledge sources</span><span x-text="files.length+' connected'"></span></button>
         <button class="tool-action" type="button" @click="cfg.web=!cfg.web"><b>◎</b><span>Search the web</span><span x-text="cfg.web?'On':'Off'"></span></button>
-        <button class="tool-action" type="button" @click="cfg.tools=!cfg.tools"><b>⌘</b><span>Use built-in tools in general chat</span><span x-text="cfg.tools?'On':'Off'"></span></button>
+        <button class="tool-action" type="button" @click="cfg.tools=!cfg.tools"><b>⌘</b><span>Use built-in tools</span><span x-text="cfg.tools?'On':'Off'"></span></button>
         <button class="tool-action" type="button" @click="libOpen=!libOpen"><b>✦</b><span>Prompt library</span><span x-text="libOpen?'Hide':'Browse'"></span></button>
         <div class="tool-prompt-library" x-show="libOpen">
           <div class="cat-row">
@@ -1066,6 +1069,7 @@ function nexus() {
         return {role:'assistant',content:m.content,q:question,cards:this.mkCards(response.documents||[]),
                 meta:response.response_plan||null,retrieval:response.retrieval_status||null,
                 approval:response.approval||null,
+                toolStatus:response.tool_status||null,
                 toolResults:Array.isArray(response.tool_result)?response.tool_result:[],
                 citations:response.citations||[],evidenceStatus:response.evidence_status||null,corpusVersion:response.corpus_version,
                 stale:!!response.corpus_version&&!!this.corpusVersion&&response.corpus_version!==this.corpusVersion};

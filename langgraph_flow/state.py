@@ -25,6 +25,8 @@ class AgentState(TypedDict, total=False):
     use_tool: bool                      # If True, route to dataframe_tool; else retriever
     tool_plan: Dict[str, Any]           # Validated table operation/source/filter plan
     tool_result: Dict[str, Any]         # Exact computed result and row provenance
+    builtin_tool_results: List[Dict[str, Any]]  # Evidence-bound read-only results
+    builtin_tool_status: Dict[str, Any]  # Safe failure state; QA can continue from evidence
     result_status: str                  # answered | needs_clarification | insufficient_evidence | citation_error | tool_error
     response_plan: Dict[str, Any]       # Strategy dict from response_planner
     draft_answer: str                   # Intermediate draft (react_agent → writer_agent)
@@ -40,6 +42,9 @@ class AgentState(TypedDict, total=False):
     provider: str
     corpus_version: Optional[str]
     request_context: Dict[str, Any]    # Server-authenticated identity, workspace and request ID
+    conversation_id: str               # Server-reserved conversation identifier
+    turn_id: str                       # Server-reserved turn identifier
+    grounded_tool_runtime: Any         # Server-owned policy-filtered tool runtime
     answer_mode: str                    # "Auto" | "Concise" | "Detailed" | "Bullet Points"
     audience: str                       # "General" | "Technical" | "Executive"
     response_depth: str                 # "Standard" | "Deep" | "Quick"
