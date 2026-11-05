@@ -25,6 +25,7 @@ class ChatRequest(BaseModel):
     audience: Literal["General", "Leadership", "Analyst", "Product", "Operations", "Sales"] = "General"
     response_depth: Literal["Fast", "Balanced", "Comprehensive"] = "Balanced"
     use_web_search: StrictBool = False
+    use_tools: StrictBool = False
     uploaded_file_types: list[FileType] = Field(default_factory=list, max_length=10)
     skill_id: Annotated[str, StringConstraints(strict=True, pattern=r"^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$")] | None = None
 
@@ -70,6 +71,11 @@ class SemanticMemoryRequest(BaseModel):
                                           min_length=1, max_length=64)]
     value: Annotated[str, StringConstraints(strict=True, strip_whitespace=True,
                                             min_length=1, max_length=1000)]
+
+
+class ToolApprovalDecisionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    decision: Literal["approve", "reject"]
 
 
 class ConnectorSourceRequest(BaseModel):

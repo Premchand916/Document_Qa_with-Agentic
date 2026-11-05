@@ -229,6 +229,7 @@ Shared access requires a configured authentication proxy; see
 The managed-folder connector API is documented in [Step 22 results](docs/STEP22_RESULTS.md).
 
 Streaming chat turns, SSE reconnect, and Stop are documented in [Step 23 results](docs/STEP23_RESULTS.md). The synchronous `/api/chat` route remains available for existing clients.
+The opt-in bounded tool loop and preference approval API are documented in [Step 24 results](docs/STEP24_RESULTS.md).
 In Knowledge Sources, connect an administrator-provided source key, then sync and publish it.
 Published snapshots are searched alongside local uploads for the authorized principal; revocation removes them from future answers and redacts stored connector-derived answers.
 

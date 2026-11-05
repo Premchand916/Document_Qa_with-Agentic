@@ -176,6 +176,15 @@ class ConversationRepository:
              event_type.value, encoded, created_at))
 
     @staticmethod
+    def _discard_pending_approvals(connection, workspace: str, principal: str,
+                                   conversation_id: str, turn_id: str) -> None:
+        if connection.execute("""SELECT 1 FROM sqlite_master WHERE type='table'
+            AND name='tool_approvals'""").fetchone() is not None:
+            connection.execute("""DELETE FROM tool_approvals WHERE workspace_id=?
+                AND principal_id=? AND conversation_id=? AND turn_id=? AND status='pending'""",
+                (workspace, principal, conversation_id, turn_id))
+
+    @staticmethod
     def _validate(workspace: str, principal: str, conversation_id: str | None = None) -> None:
         workspace_key(workspace)
         if not principal or len(principal) > 256:
@@ -290,6 +299,8 @@ class ConversationRepository:
                     lease_expires_at=NULL WHERE workspace_id=? AND principal_id=?
                     AND conversation_id=? AND idempotency_key=? AND status='running'""",
                     (workspace, principal, identifier, expired_turn["idempotency_key"]))
+                self._discard_pending_approvals(connection, workspace, principal, identifier,
+                                                expired_turn["idempotency_key"])
                 self._append_event(
                     connection, workspace, principal, identifier, expired_turn["idempotency_key"],
                     EventType.TURN_FAILED, {"status": "failed", "reason": "lease_expired"},
@@ -380,6 +391,8 @@ class ConversationRepository:
                   AND status='running' AND lease_token=?""",
                 (workspace, principal, conversation_id, idempotency_key, lease_token))
             if updated.rowcount == 1:
+                self._discard_pending_approvals(connection, workspace, principal,
+                                                conversation_id, idempotency_key)
                 self._append_event(connection, workspace, principal, conversation_id, idempotency_key,
                                    EventType.TURN_FAILED, {"status": "failed"},
                                    f"turn.failed:{lease_token}", int(time.time()))
@@ -402,6 +415,8 @@ class ConversationRepository:
                      row["idempotency_key"]))
                 if updated.rowcount == 1:
                     recovered += 1
+                    self._discard_pending_approvals(connection, row["workspace_id"], row["principal_id"],
+                                                    row["conversation_id"], row["idempotency_key"])
                     self._append_event(connection, row["workspace_id"], row["principal_id"],
                                        row["conversation_id"], row["idempotency_key"],
                                        EventType.TURN_FAILED, {"status": "failed", "reason": "lease_expired"},

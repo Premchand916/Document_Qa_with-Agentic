@@ -38,7 +38,8 @@ from capabilities.skills.loader import (SkillIntegrityError, SkillNotFound,
 from capabilities.skills.runtime import SkillAmbiguous, SkillRuntime, SkillUnavailable
 from capabilities.skills.state import SkillStateRepository
 from app.schemas import (ChatRequest, ConnectorSourceRequest, EpisodeFeedbackRequest,
-                         EpisodeReviewRequest, ProviderRequest, SemanticMemoryRequest)
+                         EpisodeReviewRequest, ProviderRequest, SemanticMemoryRequest,
+                         ToolApprovalDecisionRequest)
 from app.security import BoundaryMiddleware, MAX_FILE_BYTES, MAX_FILES, error_response
 from ingestion.file_loader import (IngestionLimitError, OCRConfigurationError, OCRRequiredError,
                                    parse_uploaded_file)
@@ -59,6 +60,8 @@ from vector_Store import faiss_store
 from vector_Store.faiss_store import build_vector_store
 from storage.workspaces import WorkspaceRepository, PublicationConflict, CorpusIntegrityError
 from storage.conversations import ConversationRepository, ConversationConflict, ConversationNotFound
+from storage.tool_approvals import (ToolApprovalConflict, ToolApprovalNotFound,
+                                    ToolApprovalRepository)
 from storage.ingestion_jobs import (IngestionCancelled, IngestionCapacityError,
                                     IngestionJobConflict, IngestionJobNotFound,
                                     IngestionJobRepository)
@@ -66,6 +69,7 @@ from storage.connectors import (ConnectorCapacityError, ConnectorConflict, Conne
                                 ConnectorRepository, ConnectorRevoked)
 from runtime.events.repository import (EventConflict, EventStreamNotFound,
                                        TurnEventRepository)
+from runtime.tool_loop import ToolApprovalRequired, ToolLoopRejected, ToolLoopRuntime
 from domain.events import EventType
 
 STATIC_DIR = Path(__file__).parent / "static"
@@ -117,6 +121,10 @@ def get_conversation_repository() -> ConversationRepository:
 
 def get_event_repository() -> TurnEventRepository:
     return TurnEventRepository(Path(os.getenv("DOCQA_DATA_DIR") or faiss_store.DB_PATH))
+
+
+def get_tool_approval_repository() -> ToolApprovalRepository:
+    return ToolApprovalRepository(Path(os.getenv("DOCQA_DATA_DIR") or faiss_store.DB_PATH))
 
 
 def get_skill_runtime() -> SkillRuntime:
@@ -252,6 +260,18 @@ async def semantic_memory_not_found(request: Request, exc: SemanticMemoryNotFoun
 @app.exception_handler(SemanticMemoryRejected)
 async def semantic_memory_rejected(request: Request, exc: SemanticMemoryRejected):
     return error_response(422, "semantic_memory_rejected", str(exc), request.state.request_id)
+
+
+@app.exception_handler(ToolApprovalNotFound)
+async def tool_approval_not_found(request: Request, exc: ToolApprovalNotFound):
+    return error_response(404, "approval_not_found", "Approval was not found in this workspace.",
+                          request.state.request_id)
+
+
+@app.exception_handler(ToolApprovalConflict)
+async def tool_approval_conflict(request: Request, exc: ToolApprovalConflict):
+    return error_response(409, "approval_conflict", "Approval is unavailable or already resolved.",
+                          request.state.request_id)
 
 
 @app.exception_handler(IngestionJobNotFound)
@@ -764,23 +784,46 @@ def _run_chat_graph(req: ChatRequest, context: dict, history: list[dict], conver
             "factual evidence.\n\n"
             f"{prompt_query}\n\nAnswer:"
         )
-        try:
-            model_response = orchestrator_agent.invoke_orchestrator(prompt, provider=snapshot.provider)
-        except (LLMConfigurationError, OllamaModelMemoryError):
-            raise ProviderUnavailableError() from None
-        response_text = getattr(model_response, "content", model_response)
-        if isinstance(response_text, list):
-            response_text = " ".join(
-                str(getattr(item, "text", item.get("text", item) if isinstance(item, dict) else item))
-                for item in response_text
-            )
+        tool_results = []
+        tool_failure = False
+        approval = None
+        if req.use_tools:
+            try:
+                tool_run = ToolLoopRuntime(
+                    build_default_registry(), get_event_repository(),
+                    orchestrator_agent.invoke_orchestrator,
+                ).run(prompt_query, snapshot.provider, context["workspace_id"],
+                      context["principal_id"], conversation_id, idempotency_key,
+                      history=history, attempt_id=context.get("_turn_attempt"))
+                response_text = tool_run["answer"]
+                tool_results = tool_run["tool_results"]
+            except ToolLoopRejected as exc:
+                response_text = ("The requested tool action could not be completed "
+                                 f"({exc.reason.replace('_', ' ')}). Please revise the request.")
+                tool_failure = True
+            except ToolApprovalRequired as exc:
+                approval = exc.approval
+                response_text = "Review the proposed preference and approve it to save it."
+            except (LLMConfigurationError, OllamaModelMemoryError):
+                raise ProviderUnavailableError() from None
+        else:
+            try:
+                model_response = orchestrator_agent.invoke_orchestrator(prompt, provider=snapshot.provider)
+            except (LLMConfigurationError, OllamaModelMemoryError):
+                raise ProviderUnavailableError() from None
+            response_text = getattr(model_response, "content", model_response)
+            if isinstance(response_text, list):
+                response_text = " ".join(
+                    str(getattr(item, "text", item.get("text", item) if isinstance(item, dict) else item))
+                    for item in response_text
+                )
         return {
             "conversation_id": conversation_id,
             "idempotency_key": idempotency_key,
             "workspace_id": snapshot.workspace_id,
             "corpus_version": snapshot.version,
             "response": str(response_text).strip(),
-            "source": "Model knowledge",
+            "source": "Built-in tool" if tool_results else "Model knowledge",
             "sources": [],
             "documents": [],
             "retrieval_status": {"status": "not_run", "reason": "general_chat_no_sources"},
@@ -791,8 +834,10 @@ def _run_chat_graph(req: ChatRequest, context: dict, history: list[dict], conver
                 "answer_mode": req.answer_mode,
                 "output_format": "Conversational response",
             },
-            "result_status": "answered",
-            "tool_result": None,
+            "result_status": ("approval_required" if approval else
+                              "tool_error" if tool_failure else "answered"),
+            "tool_result": tool_results or None,
+            "approval": approval,
             "skill": active_skill.public_contract() if active_skill else None,
             "connector_source_ids": [],
         }
@@ -947,7 +992,8 @@ async def _execute_reserved_chat(req: ChatRequest, context: dict,
                 context["workspace_id"], context["principal_id"], reserved.conversation_id,
                 idempotency_key, EventType.TURN_PROGRESS, {"stage": "generating"},
                 dedupe_key=f"turn.progress:generating:{reserved.lease_token}")
-        turn_context = {**context, "_connector_epoch": connector_epoch}
+        turn_context = {**context, "_connector_epoch": connector_epoch,
+                        "_turn_attempt": reserved.lease_token}
         response = await _run_bounded_chat(req, turn_context, reserved.history,
                                            reserved.conversation_id, idempotency_key)
         if lease_lost.is_set():
@@ -1194,6 +1240,21 @@ async def save_semantic_memory(req: SemanticMemoryRequest, request: Request):
         get_semantic_repository().upsert,
         context["workspace_id"], context["principal_id"], req.category, req.key, req.value,
     )
+
+
+@app.get("/api/tool-approvals/{approval_id}")
+async def get_tool_approval(approval_id: str, request: Request):
+    context = request.state.request_context
+    return await asyncio.to_thread(get_tool_approval_repository().get,
+                                   context["workspace_id"], context["principal_id"], approval_id)
+
+
+@app.post("/api/tool-approvals/{approval_id}/decision")
+async def decide_tool_approval(approval_id: str, req: ToolApprovalDecisionRequest, request: Request):
+    context = request.state.request_context
+    return await asyncio.to_thread(get_tool_approval_repository().resolve,
+                                   context["workspace_id"], context["principal_id"],
+                                   approval_id, req.decision)
 
 
 @app.get("/api/memories/semantic")

@@ -30,8 +30,10 @@ This is the compact restart checkpoint. At the start of every build task, read t
 - Step 22 focused connector suite: 12 tests pass, including reupload composition, empty/failed publication, owner isolation, and ACL revocation.
 - Step 23: asynchronous chat turns, owner-scoped SSE replay and Last-Event-ID reconnect, bounded progress streaming, final validated answer retrieval, and atomic terminal Stop with an in-place turn-table migration.
 - Step 23 focused event suite: 11 tests pass, including legacy migration, asynchronous completion, and a Stop race against a blocked graph result.
+- Step 24 first local slice: opt-in general-chat tool loop with policy-filtered math/UTC tools, strict model actions, call/step/estimated-token/time limits, safe tool events, and explicit owner approval for semantic-preference writes.
+- Step 24 focused tool suite: 11 tests pass; isolated Chrome showed pending approval, approved state, and immediate Memory count refresh.
 - UI follow-up: higher-contrast chat shell; source-aware starter prompts; managed-source-first Knowledge Sources dialog with visible error/status states; connector provenance labels; keyboard composer newline; modal focus handling; mobile panel backdrop and responsive source form. Local-file import remains under a secondary disclosure.
-- Current full baseline: 235 tests and all seven stages pass.
+- Current full baseline: 245 tests and all seven stages pass.
 - Local API smoke: `/api/skills` and `/api/prompt-library` return 200 with locked skill metadata. Chrome UI checked at desktop and 393px mobile width; starter focus, multiline composer, modal open/Escape return, mobile navigation, and inline connector validation error observed. Step 23 Chrome check used isolated temporary data and a slow synthetic model: progress, Stop button, and durable “Stopped.” message were observed.
 
 ## Current files
@@ -39,20 +41,23 @@ This is the compact restart checkpoint. At the start of every build task, read t
 - Contracts: `domain/capabilities.py`, `domain/events.py`, `runtime/turns.py`
 - Registry/policy: `capabilities/registry.py`, `capabilities/builtin.py`, `policy/capabilities.py`
 - Events: `runtime/events/repository.py`, `storage/conversations.py`
+- Tool loop/approval: `runtime/tool_loop.py`, `capabilities/read_tools.py`, `storage/tool_approvals.py`, `memory/semantic_memory.py`
 - API: asynchronous turns, SSE replay, Stop, and bounded HTTP replay in `app/server.py`
-- Tests: `tests/test_capability_registry.py`, `tests/test_turn_events.py`
+- Tests: `tests/test_capability_registry.py`, `tests/test_turn_events.py`, `tests/test_tool_loop.py`
 - Skills: `domain/skills.py`, `capabilities/skills/`, `.agents/skills/`; canonical development checklist at `.agents/skills/build-application-safely/resources/development-checklist.md`
 - Skill test: `tests/test_skill_runtime.py`
 - Connectors: `domain/connectors.py`, `connectors/managed_folder.py`, `connectors/service.py`, `storage/connectors.py`, connector routes in `app/server.py`
 - Connector test: `tests/test_connectors.py`
-- Decisions/results: `docs/adr/0001-capability-kernel.md`, `docs/adr/0002-versioned-skill-runtime.md`, `docs/STEP20_RESULTS.md`, `docs/STEP21_RESULTS.md`, `docs/STEP22_RESULTS.md`, `docs/STEP23_RESULTS.md`
+- Decisions/results: `docs/adr/0001-capability-kernel.md`, `docs/adr/0002-versioned-skill-runtime.md`, `docs/STEP20_RESULTS.md`, `docs/STEP21_RESULTS.md`, `docs/STEP22_RESULTS.md`, `docs/STEP23_RESULTS.md`, `docs/STEP24_RESULTS.md`
 
 ## Current limitations
 
 - Streamed progress is phase/tool status and a final validated answer; raw model token deltas need a provider streaming adapter and a safe verification protocol.
 - Stop prevents late publication but cannot forcibly interrupt an already running synchronous model thread; the deadline and chat-slot cap bound it.
 - SSE and background tasks use a single-host in-process worker and SQLite; multi-host delivery needs a shared queue and event store.
-- Capability policy exists, but a dynamic model/tool loop does not; Step 24 will consume filtered contracts.
+- Step 24's model/tool loop runs only in opt-in general chat. Grounded document/web answers still use the evidence-validated graph; they must not be bypassed by a model-selected final action.
+- Token limits are exact only when a provider reports usage; otherwise they are estimated from text. The per-loop time check cannot abort a currently blocking provider call.
+- Preference writes are the only approved write executor. Additional writes and consequential actions need dedicated validation and approval contracts.
 - Managed-folder publication is synchronous; there is no remote SaaS connector, OAuth/vault integration, background connector scheduler, plugin/MCP call, shell execution, coding sandbox, or subagent yet.
 - Skills are repository-local UTF-8 guidance only. Remote installation, executable scripts, and automatic production routing are intentionally disabled.
 - SQLite/local mode is not multi-host production infrastructure.
@@ -60,7 +65,7 @@ This is the compact restart checkpoint. At the start of every build task, read t
 
 ## Exact next action
 
-Implement Step 24's policy-filtered tool loop on the capability registry. Preserve owner scope, budgets, denial events, user-visible tool progress, and connector-source checks. Keep Ollama fine-tuning paused.
+Complete Step 24's grounded document/web tool integration through existing citations, source revocation, and evidence checks. Evaluate tool selection on local Ollama before adding plugin/MCP capabilities. Keep Ollama fine-tuning paused.
 
 ## Verification commands
 

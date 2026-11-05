@@ -200,6 +200,9 @@ body{display:flex;flex-direction:column;position:relative;z-index:1}
 .src-btn{display:block;width:100%;text-align:left;padding:7px 10px;background:var(--surf2);border:none;color:var(--txt);font-family:var(--f);font-size:12px;font-weight:500;cursor:pointer;transition:background .2s}
 .src-btn:hover{background:var(--surf3)}
 .src-summ{padding:4px 10px 7px;font-size:11.5px;color:var(--muted);line-height:1.4}
+.approval-card,.tool-result-card{margin-top:12px;padding:10px}
+.approval-card .src-summ,.tool-result-card .src-summ{padding:4px 0 7px;overflow-wrap:anywhere}
+.approval-card .d-btn{color:var(--txt);font-size:12px;padding:8px}
 .src-excerpt{padding:10px;font-size:12.5px;color:var(--txt2);line-height:1.6;border-top:1px solid var(--border);background:rgba(0,0,0,.22)}
 .src-excerpt mark{background:rgba(246,180,76,.26);color:var(--txt);border-radius:2px;padding:0 2px}
 .web-lnk{display:block;padding:7px 10px;color:var(--cyan);font-size:12.5px;font-weight:500;text-decoration:none}
@@ -607,6 +610,28 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
           <div class="bubble">
             <div class="msg-body" x-html="m.role==='assistant'?md(m.content):esc(m.content)"></div>
 
+            <template x-if="m.role==='assistant'&&m.approval">
+              <div class="src-card approval-card" role="group" aria-label="Preference approval">
+                <div class="src-lbl">Preference request</div>
+                <div class="src-summ"><strong x-text="m.approval.key"></strong><span>: </span><span x-text="m.approval.value"></span></div>
+                <div class="resp-meta" x-text="'Status: '+m.approval.status"></div>
+                <div class="depth-row" x-show="m.approval.status==='pending'">
+                  <button class="d-btn" type="button" :disabled="busy||approvalBusy===m.approval.approval_id"
+                    @click="resolveToolApproval(m,'approve')">Approve and save</button>
+                  <button class="d-btn" type="button" :disabled="busy||approvalBusy===m.approval.approval_id"
+                    @click="resolveToolApproval(m,'reject')">Reject</button>
+                </div>
+              </div>
+            </template>
+            <template x-if="m.role==='assistant'&&m.toolResults?.some(r=>r.value!==undefined)">
+              <div class="src-card tool-result-card" role="group" aria-label="Verified built-in tool results">
+                <div class="src-lbl">Built-in tool results</div>
+                <template x-for="(result,ri) in m.toolResults.filter(r=>r.value!==undefined)" :key="ri">
+                  <div class="src-summ"><span x-text="result.capability_id"></span><span>: </span><strong x-text="result.value"></strong></div>
+                </template>
+              </div>
+            </template>
+
             <!-- Source cards -->
             <template x-if="m.role==='assistant'&&m.cards&&m.cards.length>0">
               <div class="src-cards">
@@ -642,8 +667,11 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
             <template x-if="m.role==='assistant'&&m.retrieval?.reranker?.status==='fallback'">
               <div class="resp-meta" role="status">Reranker unavailable; sources shown in retrieval order.</div>
             </template>
-            <template x-if="m.role==='assistant'&&m.retrieval?.reason==='general_chat_no_sources'">
+            <template x-if="m.role==='assistant'&&m.retrieval?.reason==='general_chat_no_sources'&&!m.toolResults?.length">
               <div class="resp-meta" role="status">General model response · no workspace or web evidence used.</div>
+            </template>
+            <template x-if="m.role==='assistant'&&m.toolResults?.some(r=>r.value!==undefined)">
+              <div class="resp-meta" role="status">Built-in result · no workspace or web sources used.</div>
             </template>
             <template x-if="m.role==='assistant'&&m.evidenceStatus?.status==='possible_conflict'">
               <div class="resp-meta" role="status">Possible source conflict detected; compare cited evidence.</div>
@@ -678,6 +706,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
       <div class="composer-tools" x-show="toolsOpen" x-transition @click.outside="toolsOpen=false">
         <button class="tool-action" type="button" @click="openKnowledge();toolsOpen=false"><b>▱</b><span>Manage knowledge sources</span><span x-text="files.length+' connected'"></span></button>
         <button class="tool-action" type="button" @click="cfg.web=!cfg.web"><b>◎</b><span>Search the web</span><span x-text="cfg.web?'On':'Off'"></span></button>
+        <button class="tool-action" type="button" @click="cfg.tools=!cfg.tools"><b>⌘</b><span>Use built-in tools in general chat</span><span x-text="cfg.tools?'On':'Off'"></span></button>
         <button class="tool-action" type="button" @click="libOpen=!libOpen"><b>✦</b><span>Prompt library</span><span x-text="libOpen?'Hide':'Browse'"></span></button>
         <div class="tool-prompt-library" x-show="libOpen">
           <div class="cat-row">
@@ -894,14 +923,14 @@ function nexus() {
     workspaceId: "", workspaces: [], canSelectWorkspace: false, canReview: false, switching: true, providerChanging: false,
     files: [], indexing: false, uploadWarnings: [], ingestionJob: null, ingestionStage: 'Indexing knowledge…',
     connectorSources: [], connectorConfigured: false, connectorKey: '', connectorName: '', connectorBusy: '', connectorStatus: '', connectorError: '', knowledgeTrigger: null,
-    chatHistory: [], conversations: [], conversationId: '', conversationNextBefore: null, pendingSubmission: null, corpusVersion: null, txt: '', loading: false, activeTurn: null, stopping: false, streamStage: 'Preparing response…',
+    chatHistory: [], conversations: [], conversationId: '', conversationNextBefore: null, pendingSubmission: null, corpusVersion: null, txt: '', loading: false, activeTurn: null, stopping: false, streamStage: 'Preparing response…', approvalBusy: '',
     srcKey: null,
     notes: [], memories: [], reviewQueue: [], lastRes: null, feedbackStatus: '', memoryStatus: '',
     questions: [],
     err: null,
     statusText: 'Starting', statusReady: false,
     libOpen: false, studioOpen: false, knowledgeOpen: false, toolsOpen: false, navOpen: false, conversationSearch: '', selCat: '', cats: [], lib: {}, librarySkill: null, selectedSkill: '',
-    cfg: { mode:'Auto', audience:'General', depth:'Balanced', web:false, provider:'gemini' },
+    cfg: { mode:'Auto', audience:'General', depth:'Balanced', web:false, tools:false, provider:'gemini' },
 
     // ── Init ──────────────────────────────────────────────────────────────
     async init() {
@@ -1036,6 +1065,8 @@ function nexus() {
         const response=m.response||{};
         return {role:'assistant',content:m.content,q:question,cards:this.mkCards(response.documents||[]),
                 meta:response.response_plan||null,retrieval:response.retrieval_status||null,
+                approval:response.approval||null,
+                toolResults:Array.isArray(response.tool_result)?response.tool_result:[],
                 citations:response.citations||[],evidenceStatus:response.evidence_status||null,corpusVersion:response.corpus_version,
                 stale:!!response.corpus_version&&!!this.corpusVersion&&response.corpus_version!==this.corpusVersion};
       });
@@ -1264,6 +1295,7 @@ function nexus() {
             audience: this.cfg.audience,
             response_depth: this.cfg.depth,
             use_web_search: this.cfg.web,
+            use_tools: this.cfg.tools,
             skill_id: requestedSkill,
             uploaded_file_types: this.files.map(f=>f.ext.toUpperCase()),
           }),
@@ -1316,6 +1348,26 @@ function nexus() {
           this.pendingSubmission=null;
         }
       } catch(e) { this.err=e.message; this.stopping=false; }
+    },
+
+    async resolveToolApproval(message,decision) {
+      const approvalId=message.approval?.approval_id;
+      if(!approvalId||message.approval.status!=='pending'||this.approvalBusy) return;
+      this.approvalBusy=approvalId; this.err=null;
+      try {
+        const r=await this.apiFetch('/api/tool-approvals/'+encodeURIComponent(approvalId)+
+          '/decision',{method:'POST',headers:{'Content-Type':'application/json'},
+            body:JSON.stringify({decision})});
+        if(!r.ok) throw new Error(await this.apiError(r,'Could not resolve approval'));
+        const detail=await this.apiFetch('/api/conversations/'+encodeURIComponent(this.conversationId));
+        if(!detail.ok) throw new Error(await this.apiError(detail,'Could not refresh conversation'));
+        const data=await detail.json();
+        this.chatHistory=this.conversationMessages(data.messages||[]);
+        const last=data.messages?.at(-1);
+        this.lastRes=last?.role==='assistant'?last.response:null;
+        if(decision==='approve') await this.refreshSemanticMemories();
+      } catch(e) { this.err=e.message; }
+      finally { this.approvalBusy=''; }
     },
 
     async followTurn(conversationId,turnId,initialCursor=0) {

@@ -192,6 +192,9 @@ class TurnEventRepository:
                 (response, workspace, principal, conversation_id, turn_id))
             if updated.rowcount != 1:
                 raise EventConflict()
+            from storage.conversations import ConversationRepository
+            ConversationRepository._discard_pending_approvals(
+                connection, workspace, principal, conversation_id, turn_id)
             connection.execute("""INSERT INTO turn_cancellations(
                 workspace_id,principal_id,conversation_id,turn_id,requested_at,cancelled_at)
                 VALUES (?,?,?,?,?,?)

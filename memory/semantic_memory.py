@@ -62,6 +62,12 @@ def _validated_value(key: str, value: str) -> str:
     return normalized
 
 
+def validate_preference(key: str, value: str) -> tuple[str, str]:
+    """Validate a proposed preference before it enters an approval record."""
+    display_key, _ = _normalized_key(key)
+    return display_key, _validated_value(display_key, value)
+
+
 def _query_terms(value: str | None) -> set[str]:
     if not value:
         return set()
@@ -135,33 +141,47 @@ class SemanticMemoryRepository:
         display_key, memory_key = _normalized_key(key)
         memory_value = _validated_value(display_key, value)
         current_time = int(time.time() if now is None else now)
-        expires_at = current_time + self.retention_days * 24 * 60 * 60
         with self._connect() as connection:
             connection.execute("BEGIN IMMEDIATE")
-            existing = connection.execute("""SELECT memory_id,created_at FROM semantic_memories
+            result = self.upsert_in_transaction(connection, workspace, principal, category,
+                                                display_key, memory_value, now=current_time)
+            connection.commit()
+        return result
+
+    def upsert_in_transaction(self, connection: sqlite3.Connection, workspace: str,
+                              principal: str, category: str, key: str, value: str,
+                              *, now: int) -> dict:
+        """Apply a validated write inside the caller's SQLite transaction."""
+        self._validate_owner(workspace, principal)
+        if category not in SEMANTIC_CATEGORIES:
+            raise ValueError("Invalid semantic memory category")
+        display_key, memory_key = _normalized_key(key)
+        memory_value = _validated_value(display_key, value)
+        current_time = now
+        expires_at = current_time + self.retention_days * 24 * 60 * 60
+        existing = connection.execute("""SELECT memory_id,created_at FROM semantic_memories
                 WHERE workspace_id=? AND principal_id=? AND category=? AND memory_key=?""",
                 (workspace, principal, category, memory_key)).fetchone()
-            if existing is None:
-                active = connection.execute("""SELECT COUNT(*) FROM semantic_memories
+        if existing is None:
+            active = connection.execute("""SELECT COUNT(*) FROM semantic_memories
                     WHERE workspace_id=? AND principal_id=? AND expires_at>?""",
                     (workspace, principal, current_time)).fetchone()[0]
-                if active >= self.MAX_ACTIVE:
-                    raise ValueError(f"Semantic memory limit is {self.MAX_ACTIVE}")
-                memory_id, created_at = uuid4().hex, current_time
-                connection.execute("""INSERT INTO semantic_memories(
+            if active >= self.MAX_ACTIVE:
+                raise ValueError(f"Semantic memory limit is {self.MAX_ACTIVE}")
+            memory_id, created_at = uuid4().hex, current_time
+            connection.execute("""INSERT INTO semantic_memories(
                     workspace_id,principal_id,memory_id,category,memory_key,display_key,memory_value,
                     source,created_at,updated_at,expires_at)
                     VALUES (?,?,?,?,?,?,?,'user_explicit',?,?,?)""",
                     (workspace, principal, memory_id, category, memory_key, display_key, memory_value,
                      created_at, current_time, expires_at))
-            else:
-                memory_id, created_at = existing["memory_id"], existing["created_at"]
-                connection.execute("""UPDATE semantic_memories
+        else:
+            memory_id, created_at = existing["memory_id"], existing["created_at"]
+            connection.execute("""UPDATE semantic_memories
                     SET display_key=?,memory_value=?,updated_at=?,expires_at=?
                     WHERE workspace_id=? AND principal_id=? AND memory_id=?""",
                     (display_key, memory_value, current_time, expires_at,
                      workspace, principal, memory_id))
-            connection.commit()
         return {"memory_id": memory_id, "category": category, "key": display_key,
                 "value": memory_value, "source": "user_explicit", "created_at": created_at,
                 "updated_at": current_time, "expires_at": expires_at}

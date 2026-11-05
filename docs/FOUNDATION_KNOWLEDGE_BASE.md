@@ -453,3 +453,10 @@ Use this record for foundation changes: understand requirements, state invariant
 - No secret or OAuth token is stored for the managed-folder adapter. A future remote adapter may persist only a vault-managed credential reference.
 - Connector content reaches chat only after explicit publication. Local uploads and per-principal connector indexes are composed at read time; source/snapshot provenance travels into evidence and citations. Revocation and ACL loss remove access and redact previously stored connector-derived answers.
 - This is a local managed-folder path. External OAuth providers, background sync, multi-host revocation coordination, and production deployment remain separate gates.
+
+## Step 23 and Step 24 continuation — 5 November 2026
+
+- Step 23 added owner-scoped SSE replay with reconnect cursors, bounded phase/tool progress, and an atomic cancelled state. Stop prevents a late model result from becoming a completed answer; it cannot interrupt a synchronous provider call already executing.
+- Step 24 added an opt-in model/tool loop in general chat. The model sees only policy-filtered contracts and returns strict JSON actions. Server adapters validate every call, cap steps/calls/estimated tokens/time, and emit safe tool events. The first read tools are decimal arithmetic and server UTC time.
+- A semantic-preference write is a proposal, not an automatic model action. It is validated before storage, bound to the owner and active lease, and executed only after an explicit user approval. Approval, memory write, transcript update, and resolution events share a SQLite transaction. Duplicate decisions do not duplicate writes.
+- Existing grounded document/web routing remains unchanged until tool observations can enter the citation and source-revocation contracts safely. This is the exact next Step 24 gate; local Ollama fine-tuning remains paused.
