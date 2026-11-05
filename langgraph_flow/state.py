@@ -35,6 +35,8 @@ class AgentState(TypedDict, total=False):
     chat_history: List[Dict[str, str]]  # Prior turns [{"role": ..., "content": ...}]
     episodic_context: List[Dict[str, Any]]  # Verified prior outcomes; guidance only, never evidence
     semantic_context: List[Dict[str, Any]]  # Explicit user facts/preferences; guidance only, never evidence
+    skill_instructions: str             # Explicitly selected, policy-authorized workflow guidance
+    active_skill: Dict[str, Any]        # Public skill identity/version/digest; never executable authority
     provider: str
     corpus_version: Optional[str]
     request_context: Dict[str, Any]    # Server-authenticated identity, workspace and request ID

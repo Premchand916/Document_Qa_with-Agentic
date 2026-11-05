@@ -397,6 +397,65 @@ class ConversationRepository:
                 WHERE workspace_id=? AND principal_id=? AND conversation_id=?""", values)
             connection.commit()
 
+    def redact_connector_source(self, workspace: str, principal: str,
+                                source_id: str) -> int:
+        """Remove stored assistant answers and event text derived from a revoked source."""
+        if not re.fullmatch(r"[a-f0-9]{32}", source_id):
+            raise ValueError("Invalid connector source identifier")
+        return self._redact_connector_answers(
+            workspace, principal, lambda identifiers: source_id in identifiers,
+        )
+
+    def redact_unavailable_connector_sources(self, workspace: str, principal: str,
+                                             allowed_source_ids: set[str]) -> int:
+        """Apply current source permissions before replaying stored answers."""
+        if any(not re.fullmatch(r"[a-f0-9]{32}", item) for item in allowed_source_ids):
+            raise ValueError("Invalid connector source identifier")
+        return self._redact_connector_answers(
+            workspace, principal,
+            lambda identifiers: bool(identifiers)
+            and not set(identifiers).issubset(allowed_source_ids),
+        )
+
+    def _redact_connector_answers(self, workspace: str, principal: str,
+                                  should_redact) -> int:
+        self._validate(workspace, principal)
+        replacement = "This answer is unavailable because its knowledge source was revoked."
+        changed = set()
+        with self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            rows = connection.execute("""SELECT conversation_id,idempotency_key,response_json
+                FROM turns WHERE workspace_id=? AND principal_id=? AND status='complete'""",
+                (workspace, principal)).fetchall()
+            for row in rows:
+                response = json.loads(row["response_json"])
+                if not should_redact(response.get("connector_source_ids", [])):
+                    continue
+                response.update(response=replacement, source="", sources=[], documents=[],
+                                citations=[], tool_result=None, retrieval_status=None,
+                                evidence_status={"status": "source_revoked"},
+                                response_plan={}, result_status="source_revoked",
+                                connector_source_ids=[])
+                connection.execute("""UPDATE turns SET response_json=? WHERE workspace_id=?
+                    AND principal_id=? AND conversation_id=? AND idempotency_key=?""",
+                    (json.dumps(response, ensure_ascii=False, allow_nan=False,
+                                separators=(",", ":")), workspace, principal,
+                     row["conversation_id"], row["idempotency_key"]))
+                connection.execute("""UPDATE turn_events SET payload_json=? WHERE workspace_id=?
+                    AND principal_id=? AND conversation_id=? AND turn_id=?
+                    AND event_type='message.completed'""",
+                    (json.dumps({"response": replacement,
+                                 "result_status": "source_revoked"}, separators=(",", ":")),
+                     workspace, principal, row["conversation_id"], row["idempotency_key"]))
+                changed.add(row["conversation_id"])
+            for conversation_id in changed:
+                connection.execute("""DELETE FROM conversation_summaries
+                    WHERE workspace_id=? AND principal_id=? AND conversation_id=?""",
+                    (workspace, principal, conversation_id))
+                self._refresh_summary(connection, workspace, principal, conversation_id)
+            connection.commit()
+        return len(changed)
+
     def purge_expired(self, *, now: float | None = None) -> int:
         current_time = time.time() if now is None else now
         cutoff = datetime.fromtimestamp(

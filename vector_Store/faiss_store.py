@@ -21,9 +21,11 @@ def get_cached_embedding():
     return get_embedding_model()
 
 
-def build_vector_store(documents):
+def build_vector_store(documents, *, embedding=None):
     """Build in memory; publication is owned by the workspace repository."""
-    return _get_faiss_class().from_documents(documents, get_cached_embedding())
+    return _get_faiss_class().from_documents(
+        documents, embedding if embedding is not None else get_cached_embedding()
+    )
 
 
 def create_vector_store(documents):

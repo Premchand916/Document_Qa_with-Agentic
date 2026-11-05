@@ -20,6 +20,9 @@ class ApiAndGraphTests(OfflineCase):
         self.assertIn("Message Nexus", html)
         self.assertIn("conversation-list", html)
         self.assertIn("General chat remains available", html)
+        self.assertIn("selectedSkill='prompt-library'", html)
+        self.assertIn("skill_id: requestedSkill", html)
+        self.assertIn("loadPromptLibrary()", html)
         self.assertNotIn("@drop.prevent", html)
         self.assertNotIn("Drop files", html)
 

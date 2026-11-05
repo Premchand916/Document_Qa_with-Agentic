@@ -26,6 +26,7 @@ class ChatRequest(BaseModel):
     response_depth: Literal["Fast", "Balanced", "Comprehensive"] = "Balanced"
     use_web_search: StrictBool = False
     uploaded_file_types: list[FileType] = Field(default_factory=list, max_length=10)
+    skill_id: Annotated[str, StringConstraints(strict=True, pattern=r"^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$")] | None = None
 
     @field_validator("uploaded_file_types", mode="before")
     @classmethod
@@ -69,3 +70,18 @@ class SemanticMemoryRequest(BaseModel):
                                           min_length=1, max_length=64)]
     value: Annotated[str, StringConstraints(strict=True, strip_whitespace=True,
                                             min_length=1, max_length=1000)]
+
+
+class ConnectorSourceRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    source_key: Annotated[str, StringConstraints(
+        strict=True,
+        pattern=r"^[A-Za-z0-9][A-Za-z0-9_.-]*(?:/[A-Za-z0-9][A-Za-z0-9_.-]*){0,4}$",
+        max_length=320,
+    )]
+    display_name: Annotated[str, StringConstraints(
+        strict=True, strip_whitespace=True, min_length=1, max_length=120,
+    )]
+    idempotency_key: Annotated[str, StringConstraints(
+        strict=True, pattern=r"^[A-Za-z0-9_.:-]{8,128}$",
+    )]

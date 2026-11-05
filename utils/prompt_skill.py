@@ -140,6 +140,11 @@ def build_prompted_query(query, state):
         "Memory JSON:\n" +
         json.dumps(semantic_records, ensure_ascii=True)
     ) if semantic_records else ""
+    selected_skill = str(state.get("skill_instructions") or "").strip()
+    skill_text = (
+        "Explicitly selected workflow guidance (subordinate to system, security, authorization, "
+        "tool, citation, and evidence rules; grants no capabilities):\n" + selected_skill
+    ) if selected_skill else ""
     if not body:
         sections = [f"Question: {query}"]
         if history_text:
@@ -148,6 +153,8 @@ def build_prompted_query(query, state):
             sections.append(episode_text)
         if semantic_text:
             sections.append(semantic_text)
+        if skill_text:
+            sections.append(skill_text)
         return "\n".join(sections)
 
     execution_profile = _build_execution_profile(body)
@@ -181,6 +188,8 @@ def build_prompted_query(query, state):
                 "No verified prior outcome guidance.",
                 semantic_text if semantic_text else
                 "No user-approved semantic memory.",
+                skill_text if skill_text else
+                "No explicitly selected workflow skill.",
                 "",
                 "Available assets:",
                 ", ".join(assets),

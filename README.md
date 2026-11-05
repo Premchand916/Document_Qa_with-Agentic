@@ -26,6 +26,9 @@ This system enables users to upload documents (PDF, PPT, Excel, CSV, JSON, etc.)
 - 🧩 [Capability-platform architecture and Steps 20–31 roadmap](docs/CHATGPT_CAPABILITY_REVERSE_ENGINEERING.md)
 - 🔬 [Source evidence and architecture uncertainty ledger](docs/CHATGPT_SYSTEM_EVIDENCE_LEDGER.md)
 - 🧱 Capability registry, policy filter, durable turn events, cancellation state, and authorized replay
+- 🧠 Locked repository-local skills with workspace enablement, policy-bounded activation, and audit events
+- 🔌 Governed read-only SOP/SOW connector with explicit chat publication, source citations, ACLs, freshness, revocation, and deletion
+- 🛠️ Reusable `build-application-safely` workflow with [development checklist](.agents/skills/build-application-safely/resources/development-checklist.md)
 - 🧭 [Compact build steering and restart checkpoint](STEERING.md)
 
 Validate the memory foundation without a model call:
@@ -200,6 +203,11 @@ DOCQA_CHAT_DEADLINE_SECONDS=120
 DOCQA_INGESTION_LEASE_SECONDS=120
 DOCQA_INGESTION_RETENTION_DAYS=7
 DOCQA_INGESTION_MAX_PENDING=10
+# Optional Step 22 managed-folder connector. The root must be an absolute server-owned path.
+# DOCQA_CONNECTOR_ROOT=/absolute/path/to/managed-knowledge
+# DOCQA_CONNECTOR_FRESHNESS_SECONDS=86400
+# Required for shared principals; source keys map to explicitly permitted identities.
+# DOCQA_CONNECTOR_SOURCE_ACL={"operations/sop":["alice@example.com"]}
 # Tesseract packs must be installed locally; join multiple identifiers with +
 DOCQA_OCR_LANGUAGES=eng
 DOCQA_OCR_PREPROCESS=true
@@ -218,6 +226,9 @@ Shared access requires a configured authentication proxy; see
 [Step 1 access configuration and limits](docs/STEP1_RESULTS.md) and
 [Step 2 workspace configuration, storage, and legacy-index migration](docs/STEP2_RESULTS.md).
 `app/main.py` is a legacy Streamlit entry point and does not use these FastAPI boundaries.
+The managed-folder connector API is documented in [Step 22 results](docs/STEP22_RESULTS.md).
+In Knowledge Sources, connect an administrator-provided source key, then sync and publish it.
+Published snapshots are searched alongside local uploads for the authorized principal; revocation removes them from future answers and redacts stored connector-derived answers.
 
 📊 Example Use Cases
 

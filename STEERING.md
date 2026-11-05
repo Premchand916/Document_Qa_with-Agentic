@@ -1,6 +1,6 @@
 # Build Steering and Continuity
 
-**Updated:** 3 November 2026  
+**Updated:** 5 November 2026
 **Current objective:** build the capability platform in dependency order without weakening the proven document, memory, ownership, or evidence boundaries.
 
 ## Read this first
@@ -23,7 +23,13 @@ This is the compact restart checkpoint. At the start of every build task, read t
 - Steps 0–19: bounded ingestion, versioned corpora, routing/calculation, durable conversations, hybrid retrieval, evidence contracts, memory layers, evaluation tooling, and chat-first product shell.
 - Architecture review: Steps 20–31 and security boundaries documented in `docs/CHATGPT_CAPABILITY_REVERSE_ENGINEERING.md`.
 - Step 20 code: typed capability definitions; deterministic registry; fail-closed policy filtering; registered legacy chat capability; canonical current turn states; append-only SQLite events; atomic lifecycle events; owner-scoped cursor replay API; durable cancellation requests; expiry/restart recovery; secret-key rejection.
-- Step 20 verification: 26 focused tests pass; the full baseline passes 212 tests and all seven stages.
+- Step 20 verification: 26 focused tests pass.
+- Step 21: strict repository-local skill packages, digest locks, progressive loading, workspace enablement/audit, policy-bounded dependencies, explicit activation, prompt-library skill, read-only API, and activation events.
+- Reusable `build-application-safely` skill v1.1: risk mapping, vertical slices, failure recovery, layered verification, truthful evidence boundaries, durable handoff, and canonical `resources/development-checklist.md`.
+- Step 22: managed-folder connector to chat with explicit publish, isolated principal/source FAISS indexes, read-time composition with local uploads, snapshot provenance and citations, ACL/freshness/epoch checks, revocation cleanup, and stored-answer/event redaction.
+- Step 22 focused connector suite: 12 tests pass, including reupload composition, empty/failed publication, owner isolation, and ACL revocation.
+- Current full baseline: 231 tests and all seven stages pass.
+- Local API smoke: `/api/skills` and `/api/prompt-library` return 200 with locked skill metadata. Browser automation host was unavailable; static UI checks pass.
 
 ## Current files
 
@@ -32,24 +38,29 @@ This is the compact restart checkpoint. At the start of every build task, read t
 - Events: `runtime/events/repository.py`, `storage/conversations.py`
 - API: `GET /api/conversations/{conversation_id}/events` in `app/server.py`
 - Tests: `tests/test_capability_registry.py`, `tests/test_turn_events.py`
-- Decision/result: `docs/adr/0001-capability-kernel.md`, `docs/STEP20_RESULTS.md`
+- Skills: `domain/skills.py`, `capabilities/skills/`, `.agents/skills/`; canonical development checklist at `.agents/skills/build-application-safely/resources/development-checklist.md`
+- Skill test: `tests/test_skill_runtime.py`
+- Connectors: `domain/connectors.py`, `connectors/managed_folder.py`, `connectors/service.py`, `storage/connectors.py`, connector routes in `app/server.py`
+- Connector test: `tests/test_connectors.py`
+- Decisions/results: `docs/adr/0001-capability-kernel.md`, `docs/adr/0002-versioned-skill-runtime.md`, `docs/STEP20_RESULTS.md`, `docs/STEP21_RESULTS.md`, `docs/STEP22_RESULTS.md`
 
 ## Current limitations
 
 - Replay is bounded HTTP polling, not SSE streaming.
 - A cancellation request is durable and visible, but hard Stop and a `cancelled` terminal state belong to Step 23.
 - Capability policy exists, but a dynamic model/tool loop does not; Step 24 will consume filtered contracts.
-- No skill packages, external connectors, plugin/MCP calls, shell execution, coding sandbox, or subagents exist yet.
+- Managed-folder publication is synchronous; there is no remote SaaS connector, OAuth/vault integration, background connector scheduler, plugin/MCP call, shell execution, coding sandbox, or subagent yet.
+- Skills are repository-local UTF-8 guidance only. Remote installation, executable scripts, and automatic production routing are intentionally disabled.
 - SQLite/local mode is not multi-host production infrastructure.
 
 ## Exact next action
 
-Implement Step 21 only: versioned repository-local skills with strict metadata/path/symlink validation, digest locks, progressive loading, workspace enablement, and audit events. Convert the current prompt profile into a built-in skill without changing answer behavior.
+Implement Step 23 SSE turn replay, reconnect, progress display, and terminal Stop semantics on the existing event and cancellation contracts. Keep connector source authorization checks in every replay path.
 
 ## Verification commands
 
 ```bash
-python3 -m unittest tests.test_capability_registry tests.test_turn_events tests.test_conversations -v
+python3 -m unittest tests.test_connectors tests.test_skill_runtime tests.test_capability_registry tests.test_turn_events tests.test_conversations -v
 python3 -m compileall -q capabilities domain policy runtime storage app tests
 python3 -m tools.run_baseline
 git diff --check

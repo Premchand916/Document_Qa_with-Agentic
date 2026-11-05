@@ -33,7 +33,8 @@ class InputBoundaryTests(OfflineCase):
 
     def test_unknown_controls_and_client_identity_fields_are_rejected(self):
         for extras in ({"audience": "invented"}, {"answer_mode": "invented"}, {"response_depth": "invented"},
-                       {"workspace_id": "victim"}, {"principal_id": "admin"}, {"use_web_search": "false"}):
+                       {"workspace_id": "victim"}, {"principal_id": "admin"}, {"use_web_search": "false"},
+                       {"skill_id": "../unsafe"}):
             self.assertEqual(self.client().post("/api/chat", json={"query": "alpha", **extras}).status_code, 422)
 
     def test_client_history_is_validated_but_not_trusted_as_conversation_memory(self):

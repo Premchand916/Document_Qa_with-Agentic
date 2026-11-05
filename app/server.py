@@ -2,6 +2,7 @@
 import asyncio
 from contextlib import suppress
 import hashlib
+import json
 import os
 import re
 import sys
@@ -30,8 +31,13 @@ from agents import orchestrator_agent
 from agents.orchestrator_agent import get_active_provider, LLMConfigurationError, OllamaModelMemoryError
 from agents.question_generator import generate_questions
 from app.prompt_library import PROMPT_LIBRARY, get_prompt_categories
-from app.schemas import (ChatRequest, EpisodeFeedbackRequest, EpisodeReviewRequest,
-                         ProviderRequest, SemanticMemoryRequest)
+from capabilities.builtin import build_default_registry
+from capabilities.skills.loader import (SkillIntegrityError, SkillNotFound,
+                                         SkillPackageLoader)
+from capabilities.skills.runtime import SkillAmbiguous, SkillRuntime, SkillUnavailable
+from capabilities.skills.state import SkillStateRepository
+from app.schemas import (ChatRequest, ConnectorSourceRequest, EpisodeFeedbackRequest,
+                         EpisodeReviewRequest, ProviderRequest, SemanticMemoryRequest)
 from app.security import BoundaryMiddleware, MAX_FILE_BYTES, MAX_FILES, error_response
 from ingestion.file_loader import (IngestionLimitError, OCRConfigurationError, OCRRequiredError,
                                    parse_uploaded_file)
@@ -42,6 +48,11 @@ from memory.followups import needs_reference_clarification, resolve_followup_que
 from memory.episodic_memory import EpisodeConflict, EpisodeNotFound, EpisodicMemoryRepository
 from memory.semantic_memory import (SemanticMemoryNotFound, SemanticMemoryRejected,
                                     SemanticMemoryRepository)
+from connectors.managed_folder import ManagedFolderAdapter
+from connectors.indexing import (ConnectorPublicationError, composed_snapshot,
+                                 publish_connector_source, purge_connector_index)
+from connectors.service import (ConnectorAccessDenied, ConnectorConfigurationError,
+                                ConnectorService, ConnectorSyncError)
 from utils.prompt_skill import build_prompted_query
 from vector_Store import faiss_store
 from vector_Store.faiss_store import build_vector_store
@@ -50,6 +61,8 @@ from storage.conversations import ConversationRepository, ConversationConflict, 
 from storage.ingestion_jobs import (IngestionCancelled, IngestionCapacityError,
                                     IngestionJobConflict, IngestionJobNotFound,
                                     IngestionJobRepository)
+from storage.connectors import (ConnectorCapacityError, ConnectorConflict, ConnectorNotFound,
+                                ConnectorRepository, ConnectorRevoked)
 from runtime.events.repository import (EventConflict, EventStreamNotFound,
                                        TurnEventRepository)
 
@@ -104,6 +117,15 @@ def get_event_repository() -> TurnEventRepository:
     return TurnEventRepository(Path(os.getenv("DOCQA_DATA_DIR") or faiss_store.DB_PATH))
 
 
+def get_skill_runtime() -> SkillRuntime:
+    data_root = Path(os.getenv("DOCQA_DATA_DIR") or faiss_store.DB_PATH)
+    skill_root = ROOT_DIR / ".agents" / "skills"
+    return SkillRuntime(
+        SkillPackageLoader(skill_root), SkillStateRepository(data_root),
+        TurnEventRepository(data_root), build_default_registry(),
+    )
+
+
 def get_episodic_repository() -> EpisodicMemoryRepository:
     raw_value = os.getenv("DOCQA_EPISODE_RETENTION_DAYS", "180").strip()
     try:
@@ -144,6 +166,49 @@ def get_ingestion_repository() -> IngestionJobRepository:
         lease_seconds=configured("DOCQA_INGESTION_LEASE_SECONDS", 120, 10, 3600),
         retention_days=configured("DOCQA_INGESTION_RETENTION_DAYS", 7, 1, 365),
         max_pending_per_workspace=configured("DOCQA_INGESTION_MAX_PENDING", 10, 1, 100),
+    )
+
+
+def get_connector_repository() -> ConnectorRepository:
+    return ConnectorRepository(Path(os.getenv("DOCQA_DATA_DIR") or faiss_store.DB_PATH))
+
+
+def get_connector_data_root() -> Path:
+    return Path(os.getenv("DOCQA_DATA_DIR") or faiss_store.DB_PATH)
+
+
+def get_connector_service(context: dict | None = None) -> ConnectorService:
+    raw_root = os.getenv("DOCQA_CONNECTOR_ROOT", "").strip()
+    source_root = Path(raw_root) if raw_root else ROOT_DIR / ".connector-root-not-configured"
+    if raw_root and (not source_root.is_absolute() or source_root == Path(source_root.anchor)):
+        raise ConnectorConfigurationError()
+    try:
+        raw_acl = json.loads(os.getenv("DOCQA_CONNECTOR_SOURCE_ACL", "{}"))
+        if (not isinstance(raw_acl, dict) or len(raw_acl) > 100
+                or any(not isinstance(key, str) or not isinstance(values, list)
+                       or not values or len(values) > 100
+                       or any(not isinstance(value, str) or not value or len(value) > 256
+                              for value in values)
+                       for key, values in raw_acl.items())):
+            raise ValueError
+        from domain.connectors import validate_source_key
+        source_acl = {validate_source_key(key): frozenset(values)
+                      for key, values in raw_acl.items()}
+        freshness = int(os.getenv("DOCQA_CONNECTOR_FRESHNESS_SECONDS", "86400"))
+        if not 60 <= freshness <= 30 * 24 * 60 * 60:
+            raise ValueError
+    except (TypeError, ValueError):
+        raise ConnectorConfigurationError() from None
+    local_principals = frozenset()
+    if (context and context.get("principal_id") == "local-developer"
+            and context.get("can_select_workspace") is False
+            and context.get("allowed_workspaces") == [context.get("workspace_id")]):
+        local_principals = frozenset({"local-developer"})
+    return ConnectorService(
+        get_connector_repository(),
+        ManagedFolderAdapter(source_root), source_acl=source_acl,
+        allow_unlisted_principals=local_principals, configured=bool(raw_root),
+        freshness_seconds=freshness,
     )
 
 
@@ -212,10 +277,76 @@ async def event_conflict(request: Request, exc: EventConflict):
     return error_response(409, "event_conflict", "Turn event state changed; refresh and retry.", request.state.request_id)
 
 
+@app.exception_handler(SkillNotFound)
+async def skill_not_found(request: Request, exc: SkillNotFound):
+    return error_response(404, "skill_not_found", "Requested skill was not found.", request.state.request_id)
+
+
+@app.exception_handler(SkillUnavailable)
+async def skill_unavailable(request: Request, exc: SkillUnavailable):
+    return error_response(409, "skill_unavailable", "Requested skill is disabled or unauthorized.", request.state.request_id)
+
+
+@app.exception_handler(SkillIntegrityError)
+async def skill_integrity_error(request: Request, exc: SkillIntegrityError):
+    return error_response(503, "skill_integrity_error", "Configured skill failed integrity validation.", request.state.request_id)
+
+
+@app.exception_handler(SkillAmbiguous)
+async def skill_ambiguous(request: Request, exc: SkillAmbiguous):
+    return error_response(409, "skill_ambiguous", "More than one skill matches this request.", request.state.request_id)
+
+
+@app.exception_handler(ConnectorNotFound)
+async def connector_not_found(request: Request, exc: ConnectorNotFound):
+    return error_response(404, "connector_not_found", "Connector source was not found.", request.state.request_id)
+
+
+@app.exception_handler(ConnectorConflict)
+async def connector_conflict(request: Request, exc: ConnectorConflict):
+    return error_response(409, "connector_conflict", "Connector state changed or conflicts with this request.", request.state.request_id)
+
+
+@app.exception_handler(ConnectorCapacityError)
+async def connector_capacity(request: Request, exc: ConnectorCapacityError):
+    return error_response(409, "connector_capacity", "Connector storage reached its configured limit.", request.state.request_id)
+
+
+@app.exception_handler(ConnectorRevoked)
+async def connector_revoked(request: Request, exc: ConnectorRevoked):
+    return error_response(409, "connector_revoked", "Connector access has been revoked.", request.state.request_id)
+
+
+@app.exception_handler(ConnectorAccessDenied)
+async def connector_access_denied(request: Request, exc: ConnectorAccessDenied):
+    return error_response(403, "connector_forbidden", "This account cannot access that source.", request.state.request_id)
+
+
+@app.exception_handler(ConnectorConfigurationError)
+async def connector_configuration_error(request: Request, exc: ConnectorConfigurationError):
+    return error_response(503, "connector_not_configured", "Connector access is not configured.", request.state.request_id)
+
+
+@app.exception_handler(ConnectorSyncError)
+async def connector_sync_error(request: Request, exc: ConnectorSyncError):
+    if exc.code == "source_limit":
+        return error_response(413, exc.code, "Connector source exceeds the configured limits.", request.state.request_id)
+    if exc.code == "snapshot_capacity":
+        return error_response(409, exc.code, "Connector snapshot history reached its configured limit.", request.state.request_id)
+    return error_response(503, exc.code, "Connector source could not be synchronized.", request.state.request_id)
+
+
+@app.exception_handler(ConnectorPublicationError)
+async def connector_publication_error(request: Request, exc: ConnectorPublicationError):
+    return error_response(503, "connector_publication_failed",
+                          "Connector snapshot could not be indexed.", request.state.request_id)
+
+
 _graph = None
 _CHAT_SLOTS = asyncio.Semaphore(2)
 _INGESTION_SLOTS = asyncio.Semaphore(2)
 _INGESTION_TASKS: dict[str, asyncio.Task] = {}
+_CONNECTOR_REPLY_LOCK = asyncio.Lock()
 
 
 @app.on_event("startup")
@@ -528,9 +659,53 @@ async def cancel_ingestion_job(job_id: str, request: Request):
     ))
 
 
+def _composed_for_context(context: dict):
+    base = get_repository().snapshot(context["workspace_id"])
+    connector_repository = get_connector_repository()
+    authorized_sources = get_connector_service(context).authorized_published_sources(
+        context["workspace_id"], context["principal_id"],
+    )
+    return composed_snapshot(base, connector_repository, get_connector_data_root(),
+                             faiss_store.get_cached_embedding, context["principal_id"],
+                             authorized_sources)
+
+
+def _redact_unavailable_connector_history(context: dict) -> None:
+    service = get_connector_service(context)
+    allowed = {source["source_id"]
+               for source in service.list_sources(context["workspace_id"], context["principal_id"])
+               if source["state"] == "active" and source["grant_state"] == "active"
+               and service.can_access(context["principal_id"], source["source_key"])}
+    get_conversation_repository().redact_unavailable_connector_sources(
+        context["workspace_id"], context["principal_id"], allowed,
+    )
+
+
+def _assert_current_connector_access(context: dict, source_ids: list[str]) -> None:
+    if not source_ids:
+        return
+    current = {source["source_id"] for source in
+               get_connector_service(context).authorized_published_sources(
+                   context["workspace_id"], context["principal_id"])}
+    if not set(source_ids).issubset(current):
+        raise ConnectorRevoked()
+
+
 def _run_chat_graph(req: ChatRequest, context: dict, history: list[dict], conversation_id: str,
                     idempotency_key: str) -> dict:
-    snapshot = get_repository().snapshot(context["workspace_id"])
+    if (context.get("_connector_epoch") is not None and
+            get_connector_repository().revocation_epoch(
+                context["workspace_id"], context["principal_id"]
+            ) != context["_connector_epoch"]):
+        raise ConnectorRevoked()
+    active_skill = None
+    if req.skill_id:
+        active_skill = get_skill_runtime().activate(
+            context["workspace_id"], context["principal_id"], conversation_id,
+            idempotency_key, req.skill_id,
+        )
+    snapshot, connector_ids = _composed_for_context(context)
+    connector_repository = get_connector_repository()
     if needs_reference_clarification(req.query, history):
         return {
             "conversation_id": conversation_id,
@@ -547,6 +722,8 @@ def _run_chat_graph(req: ChatRequest, context: dict, history: list[dict], conver
             "response_plan": {},
             "result_status": "needs_clarification",
             "tool_result": None,
+            "skill": active_skill.public_contract() if active_skill else None,
+            "connector_source_ids": [],
         }
     episodic_context = get_episodic_repository().recall(
         context["workspace_id"], context["principal_id"], req.query, snapshot.version
@@ -567,6 +744,7 @@ def _run_chat_graph(req: ChatRequest, context: dict, history: list[dict], conver
             "use_web_search": req.use_web_search,
             "episodic_context": episodic_context,
             "semantic_context": semantic_context,
+            "skill_instructions": active_skill.instructions if active_skill else "",
         },
     )
 
@@ -611,6 +789,8 @@ def _run_chat_graph(req: ChatRequest, context: dict, history: list[dict], conver
             },
             "result_status": "answered",
             "tool_result": None,
+            "skill": active_skill.public_contract() if active_skill else None,
+            "connector_source_ids": [],
         }
 
     graph_state = {
@@ -632,12 +812,26 @@ def _run_chat_graph(req: ChatRequest, context: dict, history: list[dict], conver
         "use_web_search": req.use_web_search,
         "episodic_context": episodic_context,
         "semantic_context": semantic_context,
+        "skill_instructions": active_skill.instructions if active_skill else "",
+        "active_skill": active_skill.public_contract() if active_skill else {},
     }
 
     try:
         result = _graph.invoke(graph_state)
     except (LLMConfigurationError, OllamaModelMemoryError):
         raise ProviderUnavailableError() from None
+
+    connector_repository.assert_published_current(
+        context["workspace_id"], context["principal_id"], connector_ids,
+    )
+    if (context.get("_connector_epoch") is not None and
+            connector_repository.revocation_epoch(
+                context["workspace_id"], context["principal_id"]
+            ) != context["_connector_epoch"]):
+        raise ConnectorRevoked()
+    used_connectors = sorted({document.metadata["connector_source_id"]
+                              for document in (result.get("documents") or [])
+                              if document.metadata.get("connector_source_id")})
 
     return {
         "conversation_id": conversation_id,
@@ -654,6 +848,8 @@ def _run_chat_graph(req: ChatRequest, context: dict, history: list[dict], conver
         "response_plan": result.get("response_plan", {}),
         "result_status": result.get("result_status"),
         "tool_result": result.get("tool_result"),
+        "skill": active_skill.public_contract() if active_skill else None,
+        "connector_source_ids": used_connectors,
     }
 
 
@@ -723,11 +919,15 @@ async def chat(req: ChatRequest, request: Request):
     context = request.state.request_context
     repository = get_conversation_repository()
     idempotency_key = req.idempotency_key or uuid4().hex
-    reserved = await asyncio.to_thread(repository.reserve, context["workspace_id"],
-                                       context["principal_id"], req.conversation_id,
-                                       idempotency_key, req.query)
-    if reserved.cached_response is not None:
-        return reserved.cached_response
+    async with _CONNECTOR_REPLY_LOCK:
+        await asyncio.to_thread(_redact_unavailable_connector_history, context)
+        connector_epoch = await asyncio.to_thread(get_connector_repository().revocation_epoch,
+                                                  context["workspace_id"], context["principal_id"])
+        reserved = await asyncio.to_thread(repository.reserve, context["workspace_id"],
+                                           context["principal_id"], req.conversation_id,
+                                           idempotency_key, req.query)
+        if reserved.cached_response is not None:
+            return reserved.cached_response
     if reserved.lease_token is None:
         raise ConversationConflict()
     lease_lost = asyncio.Event()
@@ -736,12 +936,23 @@ async def chat(req: ChatRequest, request: Request):
         reserved.lease_token, lease_lost
     ))
     try:
-        response = await _run_bounded_chat(req, context, reserved.history,
+        turn_context = {**context, "_connector_epoch": connector_epoch}
+        response = await _run_bounded_chat(req, turn_context, reserved.history,
                                            reserved.conversation_id, idempotency_key)
         if lease_lost.is_set():
             raise ConversationConflict()
-        await asyncio.to_thread(repository.complete, context["workspace_id"], context["principal_id"],
-                                reserved.conversation_id, idempotency_key, reserved.lease_token, response)
+        async with _CONNECTOR_REPLY_LOCK:
+            current_epoch = await asyncio.to_thread(get_connector_repository().revocation_epoch,
+                                                    context["workspace_id"], context["principal_id"])
+            if current_epoch != connector_epoch:
+                raise ConnectorRevoked()
+            await asyncio.to_thread(get_connector_repository().assert_published_current,
+                                    context["workspace_id"], context["principal_id"],
+                                    response.get("connector_source_ids", []))
+            await asyncio.to_thread(_assert_current_connector_access, context,
+                                    response.get("connector_source_ids", []))
+            await asyncio.to_thread(repository.complete, context["workspace_id"], context["principal_id"],
+                                    reserved.conversation_id, idempotency_key, reserved.lease_token, response)
         return response
     except BaseException:
         await asyncio.to_thread(repository.fail, context["workspace_id"], context["principal_id"],
@@ -766,9 +977,11 @@ async def get_conversation(conversation_id: str, request: Request,
                            limit: int = Query(50, ge=1, le=100),
                            before_sequence: int | None = Query(None, ge=1)):
     context = request.state.request_context
-    return await asyncio.to_thread(get_conversation_repository().get,
-                                   context["workspace_id"], context["principal_id"], conversation_id,
-                                   limit=limit, before_sequence=before_sequence)
+    async with _CONNECTOR_REPLY_LOCK:
+        await asyncio.to_thread(_redact_unavailable_connector_history, context)
+        return await asyncio.to_thread(get_conversation_repository().get,
+                                       context["workspace_id"], context["principal_id"], conversation_id,
+                                       limit=limit, before_sequence=before_sequence)
 
 
 @app.get("/api/conversations/{conversation_id}/events")
@@ -779,10 +992,12 @@ async def get_conversation_events(conversation_id: str, request: Request,
     if not re.fullmatch(r"[a-f0-9]{32}", conversation_id):
         raise EventStreamNotFound()
     context = request.state.request_context
-    events = await asyncio.to_thread(
-        get_event_repository().replay, context["workspace_id"], context["principal_id"],
-        conversation_id, turn_id=turn_id, after_sequence=after_sequence, limit=limit,
-    )
+    async with _CONNECTOR_REPLY_LOCK:
+        await asyncio.to_thread(_redact_unavailable_connector_history, context)
+        events = await asyncio.to_thread(
+            get_event_repository().replay, context["workspace_id"], context["principal_id"],
+            conversation_id, turn_id=turn_id, after_sequence=after_sequence, limit=limit,
+        )
     return {"conversation_id": conversation_id, "events": events,
             "next_sequence": events[-1]["sequence"] if events else after_sequence}
 
@@ -890,10 +1105,132 @@ async def delete_semantic_memory(memory_id: str, request: Request):
     return {"deleted": True, "memory_id": memory_id}
 
 
+def _connector_identifier(value: str) -> str:
+    if not re.fullmatch(r"[a-f0-9]{32}", value):
+        raise HTTPException(status_code=422)
+    return value
+
+
+def _connector_idempotency_key(request: Request) -> str:
+    value = request.headers.get("idempotency-key", "")
+    if not re.fullmatch(r"[A-Za-z0-9_.:-]{8,128}", value):
+        raise HTTPException(status_code=422)
+    return value
+
+
+@app.post("/api/connectors/sources", status_code=201)
+async def create_connector_source(req: ConnectorSourceRequest, request: Request):
+    context = request.state.request_context
+    service = get_connector_service(context)
+    source = await asyncio.to_thread(
+        service.create_source, context["workspace_id"], context["principal_id"],
+        req.source_key, req.display_name, req.idempotency_key,
+    )
+    return {"source": source}
+
+
+@app.get("/api/connectors/sources")
+async def list_connector_sources(request: Request):
+    context = request.state.request_context
+    service = get_connector_service(context)
+    sources = await asyncio.to_thread(
+        service.list_sources,
+        context["workspace_id"], context["principal_id"],
+    )
+    return {"sources": sources, "configured": service.configured}
+
+
+@app.post("/api/connectors/sources/{source_id}/sync")
+async def sync_connector_source(source_id: str, request: Request):
+    context = request.state.request_context
+    sync = await asyncio.to_thread(
+        get_connector_service(context).sync,
+        context["workspace_id"], context["principal_id"],
+        _connector_identifier(source_id), _connector_idempotency_key(request),
+    )
+    return {"sync": sync}
+
+
+@app.post("/api/connectors/sources/{source_id}/publish")
+async def publish_connector_source_route(source_id: str, request: Request):
+    context = request.state.request_context
+    identifier = _connector_identifier(source_id)
+    service = get_connector_service(context)
+    source = await asyncio.to_thread(service.repository.get_source,
+                                     context["workspace_id"], context["principal_id"], identifier)
+    service._authorize(context["principal_id"], source["source_key"])
+    published = await asyncio.to_thread(
+        publish_connector_source, service.repository, get_connector_data_root(),
+        faiss_store.get_cached_embedding, context["workspace_id"],
+        context["principal_id"], identifier,
+    )
+    return {"source": published}
+
+
+@app.get("/api/connectors/sources/{source_id}/snapshots")
+async def list_connector_snapshots(source_id: str, request: Request,
+                                   limit: int = Query(20, ge=1, le=100)):
+    context = request.state.request_context
+    snapshots = await asyncio.to_thread(
+        get_connector_service(context).list_snapshots,
+        context["workspace_id"], context["principal_id"],
+        _connector_identifier(source_id), limit=limit,
+    )
+    return {"snapshots": snapshots}
+
+
+@app.delete("/api/connectors/grants/{grant_id}")
+async def revoke_connector_grant(grant_id: str, request: Request):
+    context = request.state.request_context
+    identifier = _connector_identifier(grant_id)
+    repository = get_connector_repository()
+    async with _CONNECTOR_REPLY_LOCK:
+        sources = await asyncio.to_thread(repository.list_sources,
+                                          context["workspace_id"], context["principal_id"])
+        result = await asyncio.to_thread(repository.revoke_grant,
+                                         context["workspace_id"], context["principal_id"], identifier)
+        for source in sources:
+            if source["grant_id"] == identifier:
+                await asyncio.to_thread(get_conversation_repository().redact_connector_source,
+                                        context["workspace_id"], context["principal_id"],
+                                        source["source_id"])
+                await asyncio.to_thread(purge_connector_index, get_connector_data_root(),
+                                        context["workspace_id"], context["principal_id"],
+                                        source["source_id"])
+        return result
+
+
+@app.delete("/api/connectors/sources/{source_id}")
+async def delete_connector_source(source_id: str, request: Request):
+    context = request.state.request_context
+    identifier = _connector_identifier(source_id)
+    repository = get_connector_repository()
+    async with _CONNECTOR_REPLY_LOCK:
+        source = await asyncio.to_thread(repository.get_source,
+                                         context["workspace_id"], context["principal_id"], identifier)
+        await asyncio.to_thread(repository.revoke_grant,
+                                context["workspace_id"], context["principal_id"], source["grant_id"])
+        await asyncio.to_thread(get_conversation_repository().redact_connector_source,
+                                context["workspace_id"], context["principal_id"], identifier)
+        await asyncio.to_thread(purge_connector_index, get_connector_data_root(),
+                                context["workspace_id"], context["principal_id"], identifier)
+        return await asyncio.to_thread(repository.delete_source,
+                                       context["workspace_id"], context["principal_id"], identifier)
+
+
 @app.get("/api/state")
 async def get_state(request: Request):
-    workspace = request.state.request_context["workspace_id"]
-    return await asyncio.to_thread(lambda: get_repository().describe(workspace))
+    context = request.state.request_context
+    def describe():
+        state = get_repository().describe(context["workspace_id"])
+        snapshot, connector_ids = _composed_for_context(context)
+        if connector_ids:
+            state.update(corpus_version=snapshot.version,
+                         vectorstore_ready=snapshot.vectorstore is not None,
+                         tabular_ready=bool(snapshot.tabular_assets),
+                         file_types=snapshot.file_types, sources=snapshot.sources)
+        return state
+    return await asyncio.to_thread(describe)
 
 
 @app.get("/api/workspaces")
@@ -910,10 +1247,25 @@ async def set_provider(req: ProviderRequest, request: Request):
     return {"provider": req.provider}
 
 
+@app.get("/api/skills")
+async def get_skills(request: Request):
+    context = request.state.request_context
+    skills = await asyncio.to_thread(
+        get_skill_runtime().list_public, context["workspace_id"], context["principal_id"]
+    )
+    return {"skills": skills}
+
+
 @app.get("/api/prompt-library")
-async def get_prompt_library():
+async def get_prompt_library(request: Request):
+    context = request.state.request_context
+    skills = await asyncio.to_thread(
+        get_skill_runtime().list_public, context["workspace_id"], context["principal_id"]
+    )
+    prompt_skill = next((skill for skill in skills if skill["skill_id"] == "prompt-library"), None)
     return {
         "categories": get_prompt_categories(),
+        "skill": prompt_skill,
         "library": {
             k: {"description": v["description"], "prompts": v["prompts"]}
             for k, v in PROMPT_LIBRARY.items()

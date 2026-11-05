@@ -401,3 +401,55 @@ Use this record for foundation changes: understand requirements, state invariant
 - Step 21 skills may select or instruct only already-authorized capabilities; they cannot expand permissions.
 - SSE and enforced Stop remain Step 23. Tool iteration and approvals remain Step 24.
 - Continue from `STEERING.md` after context compaction; update it after each material build task.
+
+## Active work — Step 21 versioned skill runtime
+
+### Requirements
+
+- Keep skills repository-owned, versioned, bounded, progressively loaded, and non-executable.
+- Reject path escape, symlinks, undeclared files, tampering, unsafe overrides, ambiguous matches, and missing dependencies.
+- Scope enablement by workspace and invalidate approval after package change.
+- Intersect every declared dependency with Step 20 policy before model exposure.
+- Audit explicit activation without storing instructions or hidden reasoning in events.
+
+### Result — 3 November 2026
+
+- Added strict manifest/package contracts and SHA-256 locks for `.agents/skills/`.
+- Added metadata-only discovery followed by explicit instruction/resource loading and digest revalidation.
+- Added workspace-scoped persistent enablement plus state-change audit storage.
+- Added policy-bounded explicit activation and safe `capability.selected` events.
+- Converted prompt-library selection into locked `prompt-library` skill identity while retaining existing catalog prompts.
+- Added read-only skill inventory and disabled-skill UI behavior.
+- Adversarial tests cover tampering, traversal, symlinks, undeclared files, instruction overrides, cross-workspace state, version invalidation, ambiguous routing, capability escalation, restart, API activation, and event ordering.
+- Full baseline passes 219 tests and seven stages.
+
+### Decision
+
+- Skills remain guidance, not tools, evidence, plugins, or executable code.
+- Production activation remains explicit; deterministic auto-matching is not yet allowed to alter a turn.
+- Step 22 connector content will not inherit skill authority and must pass separate grant, ACL, freshness, evidence, and revocation checks.
+
+## Active work — Step 22 governed connector foundation
+
+### Requirements
+
+- Never accept an arbitrary client filesystem path or expose a server path.
+- Scope grants, sources, sync runs, and snapshots to the server-derived workspace and principal.
+- Bound files, bytes, depth, types, sync state, and freshness; make retries idempotent.
+- Preserve immutable source states and provenance while making revocation immediate and deletion complete.
+- Do not publish a connector by destructively replacing unrelated workspace knowledge.
+
+### Result — 4 November 2026
+
+- Added a read-only adapter below an absolute server-managed root; validated relative source keys are the only client-selected locator.
+- Added owner-scoped grants, sources, sync runs, content cursors, immutable snapshots, and copied-file provenance.
+- Added explicit shared-principal source ACLs, local-only development authorization, freshness, immediate revocation, and hard deletion.
+- Added idempotent retry behavior and safe handling for unchanged, changed, deleted, and reverted source states; bounded durable sources, snapshots, and retained sync history.
+- Added safe HTTP endpoints and offline adversarial tests for lifecycle, restart, ownership, ACL, traversal, symlink, type, size, and error boundaries.
+
+### Decision
+
+- Connector bytes are untrusted evidence, not instructions or capabilities.
+- No secret or OAuth token is stored for the managed-folder adapter. A future remote adapter may persist only a vault-managed credential reference.
+- Connector content reaches chat only after explicit publication. Local uploads and per-principal connector indexes are composed at read time; source/snapshot provenance travels into evidence and citations. Revocation and ACL loss remove access and redact previously stored connector-derived answers.
+- This is a local managed-folder path. External OAuth providers, background sync, multi-host revocation coordination, and production deployment remain separate gates.

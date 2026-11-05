@@ -30,8 +30,9 @@ def prepare_evidence(state: dict) -> list:
     for document in documents:
         metadata = document.metadata
         metadata["evidence_id"] = metadata.get("evidence_id") or _evidence_id(document)
-        metadata["origin"] = "web" if metadata.get("content_type") == "web_result" else "local"
-        if metadata["origin"] == "local" and version:
+        metadata["origin"] = ("web" if metadata.get("content_type") == "web_result" else
+                              "connector" if metadata.get("connector_source_id") else "local")
+        if metadata["origin"] != "web" and version:
             metadata["corpus_version"] = version
     state["documents"] = documents
     return documents
@@ -71,7 +72,9 @@ def finalize_answer(state: dict) -> dict:
     state["citations"] = [{"evidence_id": item, "source": evidence[item].metadata.get("source", "Unknown"),
                            "location": evidence[item].metadata.get("page", evidence[item].metadata.get("sheet")),
                            "origin": evidence[item].metadata.get("origin"),
-                           "corpus_version": evidence[item].metadata.get("corpus_version")}
+                           "corpus_version": evidence[item].metadata.get("corpus_version"),
+                           "connector_source_id": evidence[item].metadata.get("connector_source_id"),
+                           "connector_snapshot_id": evidence[item].metadata.get("connector_snapshot_id")}
                           for item in cited if item in evidence]
     state["evidence_status"] = detect_evidence_conflict(documents)
     if state.get("result_status") is None:

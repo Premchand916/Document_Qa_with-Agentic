@@ -625,7 +625,7 @@ body{display:flex;flex-direction:column;position:relative;z-index:1}
             <template x-for="c in cats" :key="c"><button class="cat-tab" :class="{on:selCat===c}" @click="selCat=c" x-text="c"></button></template>
           </div>
           <div class="p-grid">
-            <template x-for="p in curPrompts" :key="p"><button class="p-chip" @click="txt=p;toolsOpen=false;libOpen=false" x-text="p"></button></template>
+            <template x-for="p in curPrompts" :key="p"><button class="p-chip" :disabled="librarySkill&&!librarySkill.enabled" @click="txt=p;selectedSkill='prompt-library';toolsOpen=false;libOpen=false" x-text="p"></button></template>
           </div>
         </div>
         <div class="tool-settings">
@@ -641,7 +641,7 @@ body{display:flex;flex-direction:column;position:relative;z-index:1}
           placeholder="Message Nexus"
           x-model="txt"
           @keydown.enter.prevent="if(!$event.shiftKey)send(txt)"
-          @input="resize($event)"
+          @input="resize($event);selectedSkill=''"
           :disabled="busy"></textarea>
         <button class="send" aria-label="Send question" @click="send(txt)" :disabled="busy||!txt.trim()">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
@@ -766,7 +766,7 @@ body{display:flex;flex-direction:column;position:relative;z-index:1}
     <div class="knowledge-head">
       <div>
         <h2 id="knowledge-title">Knowledge Sources</h2>
-        <p>Manage workspace SOPs, SOWs, policies, and data sources. Connected sources become available to every chat in this workspace.</p>
+        <p>Manage SOPs, SOWs, policies, and data sources. Managed sources appear in your chats when your access is active.</p>
       </div>
       <button class="modal-close" type="button" aria-label="Close knowledge sources" @click="knowledgeOpen=false">×</button>
     </div>
@@ -785,6 +785,32 @@ body{display:flex;flex-direction:column;position:relative;z-index:1}
       </div>
       <div class="warn" role="status" x-show="uploadWarnings.length" x-text="uploadWarnings.join(' ')" aria-live="polite"></div>
 
+      <div class="sidebar-section-label" style="padding-left:0">Managed knowledge</div>
+      <div class="knowledge-add" x-show="connectorConfigured">
+        <div><strong>Connect a managed folder</strong><span>Enter a source key supplied by your administrator.</span></div>
+        <div style="display:flex;flex-direction:column;gap:7px;min-width:180px">
+          <input type="text" aria-label="Managed source key" placeholder="operations/sop" maxlength="320" x-model="connectorKey">
+          <input type="text" aria-label="Managed source name" placeholder="Source name" maxlength="120" x-model="connectorName">
+          <button class="knowledge-upload" type="button" :disabled="!!connectorBusy||!connectorKey.trim()||!connectorName.trim()" @click="connectManagedSource()">Connect</button>
+        </div>
+      </div>
+      <div class="knowledge-note" x-show="!connectorConfigured">Managed folders require server configuration.</div>
+      <div class="knowledge-note" role="status" aria-live="polite" x-show="connectorBusy" x-text="connectorStatus"></div>
+      <div class="knowledge-list" x-show="connectorSources.length">
+        <template x-for="source in connectorSources" :key="source.source_id">
+          <div class="knowledge-source" style="flex-wrap:wrap">
+            <span class="f-ico">▱</span>
+            <span class="knowledge-source-name" x-text="source.display_name"></span>
+            <span class="knowledge-source-type" x-text="source.publication_state+' · '+source.freshness"></span>
+            <div style="display:flex;gap:6px;width:100%;justify-content:flex-end">
+              <button type="button" :disabled="!!connectorBusy||source.state!=='active'||source.grant_state!=='active'" @click="syncManagedSource(source)">Sync &amp; publish</button>
+              <button type="button" :disabled="!!connectorBusy||source.state!=='active'||source.grant_state!=='active'" @click="revokeManagedSource(source)">Revoke</button>
+              <button type="button" :disabled="!!connectorBusy" @click="deleteManagedSource(source)">Delete</button>
+            </div>
+          </div>
+        </template>
+      </div>
+
       <div class="sidebar-section-label" style="padding-left:0">Connected sources</div>
       <div class="knowledge-list" x-show="files.length">
         <template x-for="f in files" :key="f.name">
@@ -792,7 +818,7 @@ body{display:flex;flex-direction:column;position:relative;z-index:1}
         </template>
       </div>
       <div class="knowledge-empty" x-show="!files.length&&!indexing">No workspace knowledge connected yet. General chat remains available.</div>
-      <div class="knowledge-note">Connector registry comes next: SharePoint, Google Drive, OneDrive, S3, and other governed repositories should use per-user grants, sync cursors, revocation, and source-level citations.</div>
+      <div class="knowledge-note">Managed folders are read-only. Published snapshots join your chats after sync; stale and revoked sources are excluded.</div>
     </div>
   </section>
 </div>
@@ -803,13 +829,14 @@ function nexus() {
     // ── State ─────────────────────────────────────────────────────────────
     workspaceId: "", workspaces: [], canSelectWorkspace: false, canReview: false, switching: true, providerChanging: false,
     files: [], indexing: false, uploadWarnings: [], ingestionJob: null, ingestionStage: 'Indexing knowledge…',
+    connectorSources: [], connectorConfigured: false, connectorKey: '', connectorName: '', connectorBusy: '', connectorStatus: '',
     chatHistory: [], conversations: [], conversationId: '', conversationNextBefore: null, pendingSubmission: null, corpusVersion: null, txt: '', loading: false,
     srcKey: null,
     notes: [], memories: [], reviewQueue: [], lastRes: null, feedbackStatus: '', memoryStatus: '',
     questions: [],
     err: null,
     statusText: 'Starting', statusReady: false,
-    libOpen: false, studioOpen: false, knowledgeOpen: false, toolsOpen: false, navOpen: false, conversationSearch: '', selCat: '', cats: [], lib: {},
+    libOpen: false, studioOpen: false, knowledgeOpen: false, toolsOpen: false, navOpen: false, conversationSearch: '', selCat: '', cats: [], lib: {}, librarySkill: null, selectedSkill: '',
     cfg: { mode:'Auto', audience:'General', depth:'Balanced', web:false, provider:'gemini' },
 
     // ── Init ──────────────────────────────────────────────────────────────
@@ -826,14 +853,7 @@ function nexus() {
       } catch(e) { this.err=e.message; }
       finally { this.switching=false; }
 
-      try {
-        const r = await this.apiFetch('/api/prompt-library');
-        if (!r.ok) throw new Error(await this.apiError(r, 'Could not load prompt library'));
-        const d = await r.json();
-        this.lib = d.library;
-        this.cats = d.categories;
-        this.selCat = this.cats[0] || '';
-      } catch(e) { this.err=e.message; }
+      await this.loadPromptLibrary();
     },
 
     get busy() { return this.loading || this.switching || this.providerChanging; },
@@ -841,6 +861,15 @@ function nexus() {
       const headers = new Headers(options.headers || {});
       if (this.canSelectWorkspace && this.workspaceId) headers.set('X-Workspace-ID', this.workspaceId);
       return fetch(url, {...options, headers});
+    },
+    async loadPromptLibrary() {
+      try {
+        const r = await this.apiFetch('/api/prompt-library');
+        if (!r.ok) throw new Error(await this.apiError(r, 'Could not load prompt library'));
+        const d = await r.json();
+        this.lib=d.library; this.librarySkill=d.skill||null; this.cats=d.categories;
+        if(!this.cats.includes(this.selCat)) this.selCat=this.cats[0]||'';
+      } catch(e) { this.lib={}; this.librarySkill=null; this.cats=[]; this.selCat=''; this.err=e.message; }
     },
     async loadWorkspace() {
       const r = await this.apiFetch('/api/state');
@@ -854,6 +883,7 @@ function nexus() {
       this.files = (s.sources || []).map(source => ({name: source.name, ext: source.name.split('.').pop().toLowerCase()}));
       this.uploadWarnings = s.warnings || [];
       this.corpusVersion = s.corpus_version || null;
+      await this.refreshConnectorSources();
       await this.refreshConversations(true);
       await this.refreshSemanticMemories();
       if(this.canReview) await this.refreshReviewQueue();
@@ -914,20 +944,22 @@ function nexus() {
       await this.refreshConversations();
     },
     newConversation() {
-      this.conversationId=''; this.conversationNextBefore=null; this.pendingSubmission=null; this.chatHistory=[]; this.lastRes=null; this.feedbackStatus=''; this.srcKey=null; this.err=null; this.toolsOpen=false;
+      this.conversationId=''; this.conversationNextBefore=null; this.pendingSubmission=null; this.chatHistory=[]; this.lastRes=null; this.feedbackStatus=''; this.srcKey=null; this.err=null; this.toolsOpen=false; this.selectedSkill='';
     },
     async switchWorkspace(workspace) {
       if (this.busy || workspace === this.workspaceId || !this.workspaces.includes(workspace)) return;
       this.switching=true;
       this.workspaceId=workspace;
       this.chatHistory=[]; this.conversationId=''; this.conversationNextBefore=null; this.pendingSubmission=null; this.conversations=[]; this.notes=[]; this.memories=[]; this.reviewQueue=[]; this.lastRes=null; this.feedbackStatus=''; this.memoryStatus=''; this.srcKey=null;
-      this.txt=''; this.files=[]; this.questions=[]; this.err=null; this.uploadWarnings=[];
+      this.txt=''; this.files=[]; this.questions=[]; this.err=null; this.uploadWarnings=[]; this.selectedSkill='';
+      this.connectorSources=[]; this.connectorConfigured=false; this.connectorKey=''; this.connectorName=''; this.connectorBusy=''; this.connectorStatus='';
       this.statusReady=false; this.statusText='Loading workspace'; this.knowledgeOpen=false; this.toolsOpen=false; this.navOpen=false;
       try {
         const access=await this.apiFetch('/api/workspaces');
         if(!access.ok) throw new Error(await this.apiError(access,'Could not load workspace access'));
         this.canReview=(await access.json()).can_review===true;
         await this.loadWorkspace();
+        await this.loadPromptLibrary();
       }
       catch(e) { this.err=e.message; this.statusText='Workspace unavailable'; }
       finally { this.switching=false; }
@@ -945,6 +977,76 @@ function nexus() {
     get currentConversationTitle() {
       if(!this.conversationId) return 'New chat';
       return this.conversations.find(thread=>thread.conversation_id===this.conversationId)?.title || 'Conversation';
+    },
+
+    async refreshConnectorSources() {
+      const r=await this.apiFetch('/api/connectors/sources');
+      if(!r.ok) throw new Error(await this.apiError(r,'Could not load managed sources'));
+      const data=await r.json();
+      this.connectorSources=data.sources||[];
+      this.connectorConfigured=data.configured===true;
+    },
+    async refreshKnowledgeState() {
+      const r=await this.apiFetch('/api/state');
+      if(!r.ok) throw new Error(await this.apiError(r,'Could not refresh knowledge'));
+      const state=await r.json();
+      this.files=(state.sources||[]).map(source=>({name:source.name,ext:source.name.split('.').pop().toLowerCase()}));
+      this.corpusVersion=state.corpus_version||null;
+      this.statusReady=true;
+      this.statusText=state.vectorstore_ready||state.tabular_ready?'Knowledge connected':'General chat ready';
+      for(const message of this.chatHistory) if(message.role==='assistant'&&message.corpusVersion&&message.corpusVersion!==this.corpusVersion) message.stale=true;
+      await this.refreshConnectorSources();
+    },
+    async connectManagedSource() {
+      if(this.connectorBusy||!this.connectorKey.trim()||!this.connectorName.trim()) return;
+      this.connectorBusy='register'; this.connectorStatus='Connecting managed source…'; this.err=null;
+      try {
+        const key=globalThis.crypto?.randomUUID?.()||`${Date.now()}-${Math.random().toString(16).slice(2)}`;
+        const r=await this.apiFetch('/api/connectors/sources',{method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({source_key:this.connectorKey.trim(),display_name:this.connectorName.trim(),idempotency_key:key})});
+        if(!r.ok) throw new Error(await this.apiError(r,'Could not connect source'));
+        const source=(await r.json()).source;
+        this.connectorKey=''; this.connectorName=''; this.connectorBusy='';
+        await this.syncManagedSource(source);
+      } catch(e) { this.err=e.message; this.connectorBusy=''; this.connectorStatus=''; await this.refreshConnectorSources(); }
+    },
+    async syncManagedSource(source) {
+      if(this.connectorBusy) return;
+      this.connectorBusy=source.source_id; this.connectorStatus='Syncing managed source…'; this.err=null;
+      try {
+        const key=globalThis.crypto?.randomUUID?.()||`${Date.now()}-${Math.random().toString(16).slice(2)}`;
+        const sync=await this.apiFetch('/api/connectors/sources/'+encodeURIComponent(source.source_id)+'/sync',
+          {method:'POST',headers:{'Idempotency-Key':key}});
+        if(!sync.ok) throw new Error(await this.apiError(sync,'Could not sync source'));
+        this.connectorStatus='Indexing source for chat…';
+        const published=await this.apiFetch('/api/connectors/sources/'+encodeURIComponent(source.source_id)+'/publish',{method:'POST'});
+        if(!published.ok) throw new Error(await this.apiError(published,'Could not publish source'));
+        await this.refreshKnowledgeState();
+      } catch(e) { this.err=e.message; await this.refreshConnectorSources(); }
+      finally { this.connectorBusy=''; this.connectorStatus=''; }
+    },
+    async revokeManagedSource(source) {
+      if(this.connectorBusy||!globalThis.confirm('Revoke this managed source from chat?')) return;
+      this.connectorBusy=source.source_id; this.connectorStatus='Revoking source…'; this.err=null;
+      try {
+        const r=await this.apiFetch('/api/connectors/grants/'+encodeURIComponent(source.grant_id),{method:'DELETE'});
+        if(!r.ok) throw new Error(await this.apiError(r,'Could not revoke source'));
+        await this.refreshKnowledgeState();
+        if(this.conversationId) await this.openConversation(this.conversationId);
+      } catch(e) { this.err=e.message; }
+      finally { this.connectorBusy=''; this.connectorStatus=''; }
+    },
+    async deleteManagedSource(source) {
+      if(this.connectorBusy||!globalThis.confirm('Delete this managed source and its snapshots permanently?')) return;
+      this.connectorBusy=source.source_id; this.connectorStatus='Deleting source…'; this.err=null;
+      try {
+        const r=await this.apiFetch('/api/connectors/sources/'+encodeURIComponent(source.source_id),{method:'DELETE'});
+        if(!r.ok) throw new Error(await this.apiError(r,'Could not delete source'));
+        await this.refreshKnowledgeState();
+        if(this.conversationId) await this.openConversation(this.conversationId);
+      } catch(e) { this.err=e.message; }
+      finally { this.connectorBusy=''; this.connectorStatus=''; }
     },
 
     // ── File handling ─────────────────────────────────────────────────────
@@ -1011,6 +1113,7 @@ function nexus() {
         this.corpusVersion=d.corpus_version;
         for(const m of this.chatHistory) if(m.role==='assistant'&&m.corpusVersion&&m.corpusVersion!==this.corpusVersion) m.stale=true;
         this.lastRes=null; this.feedbackStatus=''; this.srcKey=null;
+        await this.refreshKnowledgeState();
       } catch(e){ this.err=e.message; }
       finally{ this.indexing=false; this.ingestionJob=null; this.ingestionStage='Indexing knowledge…'; }
     },
@@ -1018,6 +1121,7 @@ function nexus() {
     // ── Chat ──────────────────────────────────────────────────────────────
     async send(q) {
       if(!q?.trim()||this.busy) return;
+      const requestedSkill=this.selectedSkill||null;
       this.txt=''; this.err=null; this.feedbackStatus='';
       const el=document.getElementById('inp'); if(el){el.style.height='auto';}
 
@@ -1027,8 +1131,10 @@ function nexus() {
 
       try {
         if(!this.pendingSubmission || this.pendingSubmission.query!==q ||
-           this.pendingSubmission.conversationId!==this.conversationId) {
+           this.pendingSubmission.conversationId!==this.conversationId ||
+           this.pendingSubmission.skillId!==requestedSkill) {
           this.pendingSubmission={query:q,conversationId:this.conversationId,
+            skillId:requestedSkill,
             key:globalThis.crypto?.randomUUID?.()||`${Date.now()}-${Math.random().toString(36).slice(2)}`};
         }
         const idempotencyKey=this.pendingSubmission.key;
@@ -1043,12 +1149,14 @@ function nexus() {
             audience: this.cfg.audience,
             response_depth: this.cfg.depth,
             use_web_search: this.cfg.web,
+            skill_id: requestedSkill,
             uploaded_file_types: this.files.map(f=>f.ext.toUpperCase()),
           }),
         });
         if(!r.ok) throw new Error(await this.apiError(r, 'Query failed'));
         const d=await r.json();
         this.conversationId=d.conversation_id;
+        this.selectedSkill='';
         this.pendingSubmission=null;
         this.lastRes=d;
         this.chatHistory.push({

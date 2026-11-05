@@ -62,6 +62,9 @@ def _execute(plan: dict, assets: list[dict]) -> dict:
             raise ValueError("Unsupported table operation")
         value = _plain(value)
     return {"source": asset["source"], "sheet": asset["sheet"], "asset_id": asset_id(asset),
+            "connector_source_id": asset.get("connector_source_id"),
+            "connector_snapshot_id": asset.get("connector_snapshot_id"),
+            "connector_file_sha256": asset.get("connector_file_sha256"),
             "operation": operation, "column": column, "filters": plan["filters"],
             "selected_rows": row_numbers, "row_count": len(selected),
             "null_policy": "skip missing values", "value": value}
@@ -129,6 +132,9 @@ def dataframe_tool_agent(state):
     state["documents"] = [Document(page_content=response, metadata={
         "source": result["source"], "page": f'Sheet {result["sheet"]}', "sheet": result["sheet"],
         "rows": result["selected_rows"], "file_type": "table", "content_type": "dataframe_result",
+        "connector_source_id": result["connector_source_id"],
+        "connector_snapshot_id": result["connector_snapshot_id"],
+        "connector_file_sha256": result["connector_file_sha256"],
     })]
     state["response"] = response
     return state

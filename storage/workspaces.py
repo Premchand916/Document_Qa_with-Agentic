@@ -192,6 +192,9 @@ class WorkspaceRepository:
         write_json(folder / "documents.json", documents)
         tables = [{"source": asset.get("source", ""), "sheet": asset.get("sheet", ""),
                    "file_type": asset.get("file_type", ""),
+                   "connector_source_id": asset.get("connector_source_id"),
+                   "connector_snapshot_id": asset.get("connector_snapshot_id"),
+                   "connector_file_sha256": asset.get("connector_file_sha256"),
                    "table": json.loads(asset["dataframe"].to_json(orient="table", index=False, date_format="iso"))}
                   for asset in tabular_assets]
         write_json(folder / "tables.json", tables)
@@ -272,6 +275,9 @@ class WorkspaceRepository:
                 raise CorpusIntegrityError("Invalid document count")
             tables = read_json(folder / "tables.json")
             assets = [{"source": row["source"], "sheet": row["sheet"], "file_type": row["file_type"],
+                       "connector_source_id": row.get("connector_source_id"),
+                       "connector_snapshot_id": row.get("connector_snapshot_id"),
+                       "connector_file_sha256": row.get("connector_file_sha256"),
                        "dataframe": pd.read_json(StringIO(json.dumps(row["table"])), orient="table")} for row in tables]
             if len(assets) != manifest["table_count"]:
                 raise CorpusIntegrityError("Invalid table count")
