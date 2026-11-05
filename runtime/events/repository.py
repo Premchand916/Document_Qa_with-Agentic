@@ -132,8 +132,13 @@ class TurnEventRepository:
         created_at = int(time.time() if now is None else now)
         with self._connect() as connection:
             connection.execute("BEGIN IMMEDIATE")
-            if not self._turn_exists(connection, workspace, principal, conversation_id, turn_id):
+            row = connection.execute("""SELECT status FROM turns WHERE workspace_id=?
+                AND principal_id=? AND conversation_id=? AND idempotency_key=?""",
+                (workspace, principal, conversation_id, turn_id)).fetchone()
+            if row is None:
                 raise EventStreamNotFound()
+            if row["status"] != "running":
+                raise EventConflict()
             event = self._append(connection, workspace, principal, conversation_id, turn_id,
                                  event_type, encoded, safe_payload, dedupe_key, created_at)
             connection.commit()
@@ -169,18 +174,38 @@ class TurnEventRepository:
                 (workspace, principal, conversation_id, turn_id)).fetchone()
             if row is None:
                 raise EventStreamNotFound()
+            if row["status"] == "cancelled":
+                stored = connection.execute("""SELECT requested_at,cancelled_at FROM turn_cancellations
+                    WHERE workspace_id=? AND principal_id=? AND conversation_id=? AND turn_id=?""",
+                    (workspace, principal, conversation_id, turn_id)).fetchone()
+                connection.commit()
+                return {"turn_id": turn_id, "cancel_requested": True,
+                        "requested_at": stored["requested_at"], "cancelled_at": stored["cancelled_at"]}
             if row["status"] != "running":
+                raise EventConflict()
+            response = json.dumps({"response": "Stopped.", "result_status": "cancelled",
+                                   "conversation_id": conversation_id,
+                                   "idempotency_key": turn_id}, separators=(",", ":"))
+            updated = connection.execute("""UPDATE turns SET status='cancelled',response_json=?,
+                lease_token=NULL,lease_expires_at=NULL WHERE workspace_id=? AND principal_id=?
+                AND conversation_id=? AND idempotency_key=? AND status='running'""",
+                (response, workspace, principal, conversation_id, turn_id))
+            if updated.rowcount != 1:
                 raise EventConflict()
             connection.execute("""INSERT INTO turn_cancellations(
                 workspace_id,principal_id,conversation_id,turn_id,requested_at,cancelled_at)
-                VALUES (?,?,?,?,?,NULL)
+                VALUES (?,?,?,?,?,?)
                 ON CONFLICT(workspace_id,principal_id,conversation_id,turn_id) DO NOTHING""",
-                (workspace, principal, conversation_id, turn_id, requested_at))
+                (workspace, principal, conversation_id, turn_id, requested_at, requested_at))
             payload = {"status": "cancel_requested"}
             encoded = json.dumps(payload, separators=(",", ":"))
             self._append(connection, workspace, principal, conversation_id, turn_id,
                          EventType.TURN_CANCEL_REQUESTED, encoded, payload,
                          "turn.cancel_requested", requested_at)
+            terminal_payload = {"status": "cancelled"}
+            self._append(connection, workspace, principal, conversation_id, turn_id,
+                         EventType.TURN_CANCELLED, json.dumps(terminal_payload, separators=(",", ":")),
+                         terminal_payload, "turn.cancelled", requested_at)
             stored = connection.execute("""SELECT requested_at,cancelled_at FROM turn_cancellations
                 WHERE workspace_id=? AND principal_id=? AND conversation_id=? AND turn_id=?""",
                 (workspace, principal, conversation_id, turn_id)).fetchone()

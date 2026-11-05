@@ -28,27 +28,30 @@ This is the compact restart checkpoint. At the start of every build task, read t
 - Reusable `build-application-safely` skill v1.1: risk mapping, vertical slices, failure recovery, layered verification, truthful evidence boundaries, durable handoff, and canonical `resources/development-checklist.md`.
 - Step 22: managed-folder connector to chat with explicit publish, isolated principal/source FAISS indexes, read-time composition with local uploads, snapshot provenance and citations, ACL/freshness/epoch checks, revocation cleanup, and stored-answer/event redaction.
 - Step 22 focused connector suite: 12 tests pass, including reupload composition, empty/failed publication, owner isolation, and ACL revocation.
+- Step 23: asynchronous chat turns, owner-scoped SSE replay and Last-Event-ID reconnect, bounded progress streaming, final validated answer retrieval, and atomic terminal Stop with an in-place turn-table migration.
+- Step 23 focused event suite: 11 tests pass, including legacy migration, asynchronous completion, and a Stop race against a blocked graph result.
 - UI follow-up: higher-contrast chat shell; source-aware starter prompts; managed-source-first Knowledge Sources dialog with visible error/status states; connector provenance labels; keyboard composer newline; modal focus handling; mobile panel backdrop and responsive source form. Local-file import remains under a secondary disclosure.
-- Current full baseline: 231 tests and all seven stages pass.
-- Local API smoke: `/api/skills` and `/api/prompt-library` return 200 with locked skill metadata. Chrome UI checked at desktop and 393px mobile width; starter focus, multiline composer, modal open/Escape return, mobile navigation, and inline connector validation error observed.
+- Current full baseline: 235 tests and all seven stages pass.
+- Local API smoke: `/api/skills` and `/api/prompt-library` return 200 with locked skill metadata. Chrome UI checked at desktop and 393px mobile width; starter focus, multiline composer, modal open/Escape return, mobile navigation, and inline connector validation error observed. Step 23 Chrome check used isolated temporary data and a slow synthetic model: progress, Stop button, and durable “Stopped.” message were observed.
 
 ## Current files
 
 - Contracts: `domain/capabilities.py`, `domain/events.py`, `runtime/turns.py`
 - Registry/policy: `capabilities/registry.py`, `capabilities/builtin.py`, `policy/capabilities.py`
 - Events: `runtime/events/repository.py`, `storage/conversations.py`
-- API: `GET /api/conversations/{conversation_id}/events` in `app/server.py`
+- API: asynchronous turns, SSE replay, Stop, and bounded HTTP replay in `app/server.py`
 - Tests: `tests/test_capability_registry.py`, `tests/test_turn_events.py`
 - Skills: `domain/skills.py`, `capabilities/skills/`, `.agents/skills/`; canonical development checklist at `.agents/skills/build-application-safely/resources/development-checklist.md`
 - Skill test: `tests/test_skill_runtime.py`
 - Connectors: `domain/connectors.py`, `connectors/managed_folder.py`, `connectors/service.py`, `storage/connectors.py`, connector routes in `app/server.py`
 - Connector test: `tests/test_connectors.py`
-- Decisions/results: `docs/adr/0001-capability-kernel.md`, `docs/adr/0002-versioned-skill-runtime.md`, `docs/STEP20_RESULTS.md`, `docs/STEP21_RESULTS.md`, `docs/STEP22_RESULTS.md`
+- Decisions/results: `docs/adr/0001-capability-kernel.md`, `docs/adr/0002-versioned-skill-runtime.md`, `docs/STEP20_RESULTS.md`, `docs/STEP21_RESULTS.md`, `docs/STEP22_RESULTS.md`, `docs/STEP23_RESULTS.md`
 
 ## Current limitations
 
-- Replay is bounded HTTP polling, not SSE streaming.
-- A cancellation request is durable and visible, but hard Stop and a `cancelled` terminal state belong to Step 23.
+- Streamed progress is phase/tool status and a final validated answer; raw model token deltas need a provider streaming adapter and a safe verification protocol.
+- Stop prevents late publication but cannot forcibly interrupt an already running synchronous model thread; the deadline and chat-slot cap bound it.
+- SSE and background tasks use a single-host in-process worker and SQLite; multi-host delivery needs a shared queue and event store.
 - Capability policy exists, but a dynamic model/tool loop does not; Step 24 will consume filtered contracts.
 - Managed-folder publication is synchronous; there is no remote SaaS connector, OAuth/vault integration, background connector scheduler, plugin/MCP call, shell execution, coding sandbox, or subagent yet.
 - Skills are repository-local UTF-8 guidance only. Remote installation, executable scripts, and automatic production routing are intentionally disabled.
@@ -57,7 +60,7 @@ This is the compact restart checkpoint. At the start of every build task, read t
 
 ## Exact next action
 
-Implement Step 23 SSE turn replay, reconnect, progress display, and terminal Stop semantics on the existing event and cancellation contracts. Keep connector source authorization checks in every replay path.
+Implement Step 24's policy-filtered tool loop on the capability registry. Preserve owner scope, budgets, denial events, user-visible tool progress, and connector-source checks. Keep Ollama fine-tuning paused.
 
 ## Verification commands
 

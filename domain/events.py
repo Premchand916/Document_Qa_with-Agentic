@@ -13,6 +13,7 @@ class EventType(str, Enum):
     TURN_COMPLETED = "turn.completed"
     TURN_FAILED = "turn.failed"
     TURN_CANCELLED = "turn.cancelled"
+    TURN_PROGRESS = "turn.progress"
     MESSAGE_COMPLETED = "message.completed"
     CAPABILITY_SELECTED = "capability.selected"
     TOOL_REQUESTED = "tool.requested"

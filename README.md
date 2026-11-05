@@ -227,6 +227,8 @@ Shared access requires a configured authentication proxy; see
 [Step 2 workspace configuration, storage, and legacy-index migration](docs/STEP2_RESULTS.md).
 `app/main.py` is a legacy Streamlit entry point and does not use these FastAPI boundaries.
 The managed-folder connector API is documented in [Step 22 results](docs/STEP22_RESULTS.md).
+
+Streaming chat turns, SSE reconnect, and Stop are documented in [Step 23 results](docs/STEP23_RESULTS.md). The synchronous `/api/chat` route remains available for existing clients.
 In Knowledge Sources, connect an administrator-provided source key, then sync and publish it.
 Published snapshots are searched alongside local uploads for the authorized principal; revocation removes them from future answers and redacts stored connector-derived answers.
 

@@ -1,4 +1,4 @@
-"""Provider-neutral turn states; cancellation requests remain orthogonal until Step 23."""
+"""Provider-neutral terminal turn states."""
 
 from enum import Enum
 
@@ -7,12 +7,14 @@ class TurnStatus(str, Enum):
     RUNNING = "running"
     COMPLETE = "complete"
     FAILED = "failed"
+    CANCELLED = "cancelled"
 
 
 _TRANSITIONS = {
-    TurnStatus.RUNNING: frozenset({TurnStatus.COMPLETE, TurnStatus.FAILED}),
+    TurnStatus.RUNNING: frozenset({TurnStatus.COMPLETE, TurnStatus.FAILED, TurnStatus.CANCELLED}),
     TurnStatus.COMPLETE: frozenset(),
     TurnStatus.FAILED: frozenset(),
+    TurnStatus.CANCELLED: frozenset(),
 }
 
 

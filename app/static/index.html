@@ -662,6 +662,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
       <div class="msg msg-a" x-show="loading">
         <div class="bubble">
           <div class="typing"><span></span><span></span><span></span></div>
+          <div class="resp-meta" role="status" aria-live="polite" x-text="streamStage"></div>
         </div>
       </div>
     </div>
@@ -701,7 +702,9 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
           @keydown.enter="onComposerEnter($event)"
           @input="resize($event);selectedSkill=''"
           :disabled="busy"></textarea>
-        <button class="send" aria-label="Send question" @click="send(txt)" :disabled="busy||!txt.trim()">
+        <button class="send" type="button" x-show="activeTurn" :disabled="stopping"
+          aria-label="Stop response" @click="stopChatTurn()" title="Stop response">■</button>
+        <button class="send" x-show="!activeTurn" aria-label="Send question" @click="send(txt)" :disabled="busy||!txt.trim()">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
             <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
           </svg>
@@ -891,7 +894,7 @@ function nexus() {
     workspaceId: "", workspaces: [], canSelectWorkspace: false, canReview: false, switching: true, providerChanging: false,
     files: [], indexing: false, uploadWarnings: [], ingestionJob: null, ingestionStage: 'Indexing knowledge…',
     connectorSources: [], connectorConfigured: false, connectorKey: '', connectorName: '', connectorBusy: '', connectorStatus: '', connectorError: '', knowledgeTrigger: null,
-    chatHistory: [], conversations: [], conversationId: '', conversationNextBefore: null, pendingSubmission: null, corpusVersion: null, txt: '', loading: false,
+    chatHistory: [], conversations: [], conversationId: '', conversationNextBefore: null, pendingSubmission: null, corpusVersion: null, txt: '', loading: false, activeTurn: null, stopping: false, streamStage: 'Preparing response…',
     srcKey: null,
     notes: [], memories: [], reviewQueue: [], lastRes: null, feedbackStatus: '', memoryStatus: '',
     questions: [],
@@ -917,7 +920,7 @@ function nexus() {
       await this.loadPromptLibrary();
     },
 
-    get busy() { return this.loading || this.switching || this.providerChanging; },
+    get busy() { return this.loading || !!this.activeTurn || this.switching || this.providerChanging; },
     useStarter(prompt, enableWeb=false) {
       this.txt=prompt;
       if(enableWeb) this.cfg.web=true;
@@ -1231,8 +1234,10 @@ function nexus() {
     // ── Chat ──────────────────────────────────────────────────────────────
     async send(q) {
       if(!q?.trim()||this.busy) return;
+      let turnFinished=false;
       const requestedSkill=this.selectedSkill||null;
       this.txt=''; this.err=null; this.feedbackStatus='';
+      this.streamStage='Preparing response…';
       const el=document.getElementById('inp'); if(el){el.style.height='auto';}
 
       this.chatHistory.push({role:'user',content:q});
@@ -1248,7 +1253,7 @@ function nexus() {
             key:globalThis.crypto?.randomUUID?.()||`${Date.now()}-${Math.random().toString(36).slice(2)}`};
         }
         const idempotencyKey=this.pendingSubmission.key;
-        const r = await this.apiFetch('/api/chat',{
+        const r = await this.apiFetch('/api/chat/turns',{
           method:'POST',
           headers:{'Content-Type':'application/json'},
           body: JSON.stringify({
@@ -1266,30 +1271,102 @@ function nexus() {
         if(!r.ok) throw new Error(await this.apiError(r, 'Query failed'));
         const d=await r.json();
         this.conversationId=d.conversation_id;
+        this.activeTurn={conversationId:d.conversation_id,turnId:d.turn_id};
+        if(d.status==='running') await this.followTurn(d.conversation_id,d.turn_id,d.after_sequence||0);
+        turnFinished=true;
+        const detail=await this.apiFetch('/api/conversations/'+encodeURIComponent(d.conversation_id));
+        if(!detail.ok) throw new Error(await this.apiError(detail,'Could not load response'));
+        const conversation=await detail.json();
+        this.conversationNextBefore=conversation.next_before_sequence||null;
+        this.chatHistory=this.conversationMessages(conversation.messages||[]);
+        const last=conversation.messages?.at(-1);
+        this.lastRes=last?.role==='assistant'?last.response:null;
         this.selectedSkill='';
         this.pendingSubmission=null;
-        this.lastRes=d;
-        this.chatHistory.push({
-          role:'assistant',
-          content:d.response||'No answer.',
-          q,
-          cards: this.mkCards(d.documents||[]),
-          meta: d.response_plan||null,
-          retrieval: d.retrieval_status||null,
-          citations: d.citations||[],
-          evidenceStatus: d.evidence_status||null,
-          corpusVersion:d.corpus_version,
-        });
         try { await this.refreshConversations(); }
         catch(e) { this.err=e.message; }
       } catch(e){
         this.err=e.message;
-        if(this.chatHistory.at(-1)?.role==='user') this.chatHistory.pop();
-        this.txt=q;
+        if(e.terminal) { turnFinished=true; this.pendingSubmission=null; }
+        if(!this.activeTurn||e.terminal){
+          if(this.chatHistory.at(-1)?.role==='user') this.chatHistory.pop();
+          this.txt=q;
+        }
       } finally {
         this.loading=false;
+        if(turnFinished) this.activeTurn=null;
+        this.stopping=false;
         this.$nextTick(()=>this.scrollDown());
       }
+    },
+
+    async stopChatTurn() {
+      if(!this.activeTurn||this.stopping) return;
+      this.stopping=true;
+      try {
+        const {conversationId,turnId}=this.activeTurn;
+        const r=await this.apiFetch('/api/conversations/'+encodeURIComponent(conversationId)+
+          '/turns/'+encodeURIComponent(turnId),{method:'DELETE'});
+        if(!r.ok) throw new Error(await this.apiError(r,'Could not stop response'));
+        this.streamStage='Stopped';
+        if(!this.loading) {
+          const detail=await this.apiFetch('/api/conversations/'+encodeURIComponent(conversationId));
+          if(detail.ok) this.chatHistory=this.conversationMessages((await detail.json()).messages||[]);
+          this.activeTurn=null;
+          this.pendingSubmission=null;
+        }
+      } catch(e) { this.err=e.message; this.stopping=false; }
+    },
+
+    async followTurn(conversationId,turnId,initialCursor=0) {
+      let cursor=initialCursor;
+      for(let attempt=0;attempt<4;attempt++) {
+        try {
+          const url='/api/conversations/'+encodeURIComponent(conversationId)+
+            '/events/stream?turn_id='+encodeURIComponent(turnId);
+          const r=await this.apiFetch(url,{headers:{'Last-Event-ID':String(cursor)}});
+          if(!r.ok||!r.body) throw new Error(await this.apiError(r,'Response stream unavailable'));
+          const reader=r.body.getReader();
+          const decoder=new TextDecoder();
+          let buffer='';
+          while(true) {
+            const {value,done}=await reader.read();
+            if(done) break;
+            buffer+=decoder.decode(value,{stream:true});
+            buffer=buffer.replace(/\r\n/g,'\n');
+            if(buffer.length>65536) throw new Error('Response stream exceeded its limit.');
+            let boundary;
+            while((boundary=buffer.indexOf('\n\n'))!==-1) {
+              const frame=buffer.slice(0,boundary); buffer=buffer.slice(boundary+2);
+              const data=frame.split('\n').find(line=>line.startsWith('data: '));
+              if(!data) continue;
+              const event=JSON.parse(data.slice(6));
+              if(event.sequence<=cursor) continue;
+              cursor=event.sequence;
+              if(event.event_type==='turn.progress') {
+                this.streamStage=event.payload.stage==='validating'?'Checking answer and sources…':'Generating response…';
+              }
+              if(event.event_type==='tool.requested'||event.event_type==='tool.started')
+                this.streamStage='Using a tool…';
+              if(event.event_type==='tool.completed') this.streamStage='Checking tool results…';
+              if(event.event_type==='tool.failed') this.streamStage='Tool failed; checking response…';
+              if(event.event_type==='turn.failed') {
+                const failure=new Error('Response failed. Please retry.');
+                failure.terminal=true;
+                throw failure;
+              }
+              if(event.event_type==='turn.completed'||event.event_type==='turn.cancelled') {
+                await reader.cancel();
+                return;
+              }
+            }
+          }
+        } catch(e) {
+          if(e.terminal||attempt===3) throw e;
+        }
+        await new Promise(resolve=>setTimeout(resolve,250*(attempt+1)));
+      }
+      throw new Error('Could not reconnect to response.');
     },
 
     // ── Source cards ──────────────────────────────────────────────────────

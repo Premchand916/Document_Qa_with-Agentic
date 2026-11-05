@@ -32,6 +32,7 @@ class TurnReservation:
     history: list[dict]
     lease_token: str | None = None
     cached_response: dict | None = None
+    event_cursor: int = 0
 
 
 class ConversationRepository:
@@ -72,7 +73,7 @@ class ConversationRepository:
                     workspace_id TEXT NOT NULL, principal_id TEXT NOT NULL,
                     conversation_id TEXT NOT NULL, sequence INTEGER NOT NULL,
                     idempotency_key TEXT NOT NULL, question TEXT NOT NULL,
-                    status TEXT NOT NULL CHECK(status IN ('running','complete','failed')),
+                    status TEXT NOT NULL CHECK(status IN ('running','complete','failed','cancelled')),
                     response_json TEXT, corpus_version TEXT,
                     lease_token TEXT, lease_expires_at INTEGER,
                     PRIMARY KEY(workspace_id, principal_id, conversation_id, sequence),
@@ -118,6 +119,35 @@ class ConversationRepository:
                 connection.execute("ALTER TABLE turns ADD COLUMN lease_token TEXT")
             if "lease_expires_at" not in turn_columns:
                 connection.execute("ALTER TABLE turns ADD COLUMN lease_expires_at INTEGER")
+            schema = connection.execute("SELECT sql FROM sqlite_master WHERE name='turns'").fetchone()[0]
+            if "'cancelled'" not in schema:
+                connection.execute("PRAGMA foreign_keys=OFF")
+                try:
+                    connection.execute("BEGIN IMMEDIATE")
+                    connection.execute("""CREATE TABLE turns_step23 (
+                        workspace_id TEXT NOT NULL, principal_id TEXT NOT NULL,
+                        conversation_id TEXT NOT NULL, sequence INTEGER NOT NULL,
+                        idempotency_key TEXT NOT NULL, question TEXT NOT NULL,
+                        status TEXT NOT NULL CHECK(status IN ('running','complete','failed','cancelled')),
+                        response_json TEXT, corpus_version TEXT, lease_token TEXT,
+                        lease_expires_at INTEGER,
+                        PRIMARY KEY(workspace_id,principal_id,conversation_id,sequence),
+                        UNIQUE(workspace_id,principal_id,conversation_id,idempotency_key),
+                        FOREIGN KEY(workspace_id,principal_id,conversation_id)
+                          REFERENCES conversations(workspace_id,principal_id,conversation_id))""")
+                    connection.execute("INSERT INTO turns_step23 SELECT * FROM turns")
+                    connection.execute("DROP TABLE turns")
+                    connection.execute("ALTER TABLE turns_step23 RENAME TO turns")
+                    connection.execute("""CREATE UNIQUE INDEX turns_principal_request
+                        ON turns(workspace_id,principal_id,idempotency_key)""")
+                    if connection.execute("PRAGMA foreign_key_check").fetchone() is not None:
+                        raise sqlite3.IntegrityError("Turn migration violates a foreign key")
+                    connection.commit()
+                except BaseException:
+                    connection.rollback()
+                    raise
+                finally:
+                    connection.execute("PRAGMA foreign_keys=ON")
             yield connection
         finally:
             connection.close()
@@ -244,7 +274,7 @@ class ConversationRepository:
             if existing is not None:
                 if existing["question"] != question:
                     raise ConversationConflict()
-                if existing["status"] == "complete":
+                if existing["status"] in ("complete", "cancelled"):
                     response = json.loads(existing["response_json"])
                     connection.commit()
                     return TurnReservation(identifier, [], cached_response=response)
@@ -288,11 +318,15 @@ class ConversationRepository:
             self._append_event(connection, workspace, principal, identifier, idempotency_key,
                                EventType.TURN_STARTED, {"status": "running"},
                                f"turn.started:{lease_token}", current_time)
+            event_cursor = connection.execute("""SELECT MAX(sequence)-1 FROM turn_events
+                WHERE workspace_id=? AND principal_id=? AND conversation_id=?""",
+                (workspace, principal, identifier)).fetchone()[0]
             connection.execute("""UPDATE conversations SET updated_at=CURRENT_TIMESTAMP
                 WHERE workspace_id=? AND principal_id=? AND conversation_id=?""",
                 (workspace, principal, identifier))
             connection.commit()
-        return TurnReservation(identifier, history, lease_token=lease_token)
+        return TurnReservation(identifier, history, lease_token=lease_token,
+                               event_cursor=event_cursor)
 
     def complete(self, workspace: str, principal: str, conversation_id: str,
                  idempotency_key: str, lease_token: str, response: dict,
@@ -378,6 +412,17 @@ class ConversationRepository:
     def recover_interrupted(self) -> int:
         """Backward-compatible alias with multi-worker-safe expiry semantics."""
         return self.recover_expired()
+
+    def turn_status(self, workspace: str, principal: str, conversation_id: str,
+                    idempotency_key: str) -> str:
+        self._validate(workspace, principal, conversation_id)
+        with self._connect() as connection:
+            row = connection.execute("""SELECT status FROM turns WHERE workspace_id=?
+                AND principal_id=? AND conversation_id=? AND idempotency_key=?""",
+                (workspace, principal, conversation_id, idempotency_key)).fetchone()
+        if row is None:
+            raise ConversationNotFound()
+        return row["status"]
 
     def delete(self, workspace: str, principal: str, conversation_id: str) -> None:
         self._validate(workspace, principal, conversation_id)
@@ -493,7 +538,7 @@ class ConversationRepository:
             if row is None:
                 raise ConversationNotFound()
             turns = connection.execute("""SELECT sequence,question,response_json FROM turns
-                WHERE workspace_id=? AND principal_id=? AND conversation_id=? AND status='complete'
+                WHERE workspace_id=? AND principal_id=? AND conversation_id=? AND status IN ('complete','cancelled')
                   AND (? IS NULL OR sequence<?)
                 ORDER BY sequence DESC LIMIT ?""",
                 (workspace, principal, conversation_id, before_sequence, before_sequence, limit + 1)).fetchall()
@@ -520,6 +565,6 @@ class ConversationRepository:
             rows = connection.execute("""SELECT c.conversation_id,c.title,c.updated_at FROM conversations c
                 WHERE c.workspace_id=? AND c.principal_id=? AND EXISTS (
                     SELECT 1 FROM turns t WHERE t.workspace_id=c.workspace_id AND t.principal_id=c.principal_id
-                    AND t.conversation_id=c.conversation_id AND t.status='complete')
+                    AND t.conversation_id=c.conversation_id AND t.status IN ('complete','cancelled'))
                 ORDER BY c.updated_at DESC,c.rowid DESC LIMIT ?""", (workspace, principal, limit)).fetchall()
         return [dict(row) for row in rows]

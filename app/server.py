@@ -3,6 +3,7 @@ import asyncio
 from contextlib import suppress
 import hashlib
 import json
+import logging
 import os
 import re
 import sys
@@ -20,7 +21,7 @@ import uvicorn
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.datastructures import UploadFile
 from starlette.exceptions import HTTPException as StarletteHTTPException
@@ -65,6 +66,7 @@ from storage.connectors import (ConnectorCapacityError, ConnectorConflict, Conne
                                 ConnectorRepository, ConnectorRevoked)
 from runtime.events.repository import (EventConflict, EventStreamNotFound,
                                        TurnEventRepository)
+from domain.events import EventType
 
 STATIC_DIR = Path(__file__).parent / "static"
 
@@ -344,6 +346,8 @@ async def connector_publication_error(request: Request, exc: ConnectorPublicatio
 
 _graph = None
 _CHAT_SLOTS = asyncio.Semaphore(2)
+_TURN_TASKS: dict[tuple[str, str, str, str], asyncio.Task] = {}
+_TURN_START_LOCK = asyncio.Lock()
 _INGESTION_SLOTS = asyncio.Semaphore(2)
 _INGESTION_TASKS: dict[str, asyncio.Task] = {}
 _CONNECTOR_REPLY_LOCK = asyncio.Lock()
@@ -912,11 +916,9 @@ async def _maintain_turn_lease(repository: ConversationRepository, context: dict
             return
 
 
-@app.post("/api/chat")
-async def chat(req: ChatRequest, request: Request):
+async def _reserve_chat(req: ChatRequest, context: dict):
     if _graph is None:
         raise HTTPException(status_code=503, detail="Workflow not ready.")
-    context = request.state.request_context
     repository = get_conversation_repository()
     idempotency_key = req.idempotency_key or uuid4().hex
     async with _CONNECTOR_REPLY_LOCK:
@@ -926,8 +928,12 @@ async def chat(req: ChatRequest, request: Request):
         reserved = await asyncio.to_thread(repository.reserve, context["workspace_id"],
                                            context["principal_id"], req.conversation_id,
                                            idempotency_key, req.query)
-        if reserved.cached_response is not None:
-            return reserved.cached_response
+    return repository, idempotency_key, connector_epoch, reserved
+
+
+async def _execute_reserved_chat(req: ChatRequest, context: dict,
+                                 repository: ConversationRepository, idempotency_key: str,
+                                 connector_epoch: int, reserved, *, progress: bool = False) -> dict:
     if reserved.lease_token is None:
         raise ConversationConflict()
     lease_lost = asyncio.Event()
@@ -936,11 +942,21 @@ async def chat(req: ChatRequest, request: Request):
         reserved.lease_token, lease_lost
     ))
     try:
+        if progress:
+            await asyncio.to_thread(get_event_repository().append,
+                context["workspace_id"], context["principal_id"], reserved.conversation_id,
+                idempotency_key, EventType.TURN_PROGRESS, {"stage": "generating"},
+                dedupe_key=f"turn.progress:generating:{reserved.lease_token}")
         turn_context = {**context, "_connector_epoch": connector_epoch}
         response = await _run_bounded_chat(req, turn_context, reserved.history,
                                            reserved.conversation_id, idempotency_key)
         if lease_lost.is_set():
             raise ConversationConflict()
+        if progress:
+            await asyncio.to_thread(get_event_repository().append,
+                context["workspace_id"], context["principal_id"], reserved.conversation_id,
+                idempotency_key, EventType.TURN_PROGRESS, {"stage": "validating"},
+                dedupe_key=f"turn.progress:validating:{reserved.lease_token}")
         async with _CONNECTOR_REPLY_LOCK:
             current_epoch = await asyncio.to_thread(get_connector_repository().revocation_epoch,
                                                     context["workspace_id"], context["principal_id"])
@@ -962,6 +978,48 @@ async def chat(req: ChatRequest, request: Request):
         heartbeat.cancel()
         with suppress(asyncio.CancelledError):
             await heartbeat
+
+
+@app.post("/api/chat")
+async def chat(req: ChatRequest, request: Request):
+    context = request.state.request_context
+    repository, idempotency_key, epoch, reserved = await _reserve_chat(req, context)
+    if reserved.cached_response is not None:
+        return reserved.cached_response
+    return await _execute_reserved_chat(req, context, repository, idempotency_key,
+                                        epoch, reserved)
+
+
+@app.post("/api/chat/turns", status_code=202)
+async def start_chat_turn(req: ChatRequest, request: Request):
+    context = request.state.request_context
+    async with _TURN_START_LOCK:
+        if len(_TURN_TASKS) >= 4:
+            raise ChatCapacityError()
+        repository, turn_id, epoch, reserved = await _reserve_chat(req, context)
+        if reserved.cached_response is not None:
+            return JSONResponse({"conversation_id": reserved.conversation_id,
+                                 "turn_id": turn_id,
+                                 "status": "cancelled" if reserved.cached_response.get(
+                                     "result_status") == "cancelled" else "complete",
+                                 "response": reserved.cached_response})
+        key = (context["workspace_id"], context["principal_id"], reserved.conversation_id, turn_id)
+        async def run_turn():
+            try:
+                await _execute_reserved_chat(req, context, repository, turn_id, epoch,
+                                             reserved, progress=True)
+            except (ConversationConflict, EventConflict):
+                pass  # Cancellation or a lost lease already has a terminal event.
+            except Exception as exc:
+                logging.getLogger(__name__).warning(
+                    "Background chat turn ended with %s", type(exc).__name__)
+                # The durable turn.failed or turn.cancelled event is the client result.
+            finally:
+                _TURN_TASKS.pop(key, None)
+        task = asyncio.create_task(run_turn())
+        _TURN_TASKS[key] = task
+    return {"conversation_id": reserved.conversation_id, "turn_id": turn_id,
+            "status": "running", "after_sequence": reserved.event_cursor}
 
 
 @app.get("/api/conversations")
@@ -1000,6 +1058,68 @@ async def get_conversation_events(conversation_id: str, request: Request,
         )
     return {"conversation_id": conversation_id, "events": events,
             "next_sequence": events[-1]["sequence"] if events else after_sequence}
+
+
+@app.get("/api/conversations/{conversation_id}/events/stream")
+async def stream_conversation_events(conversation_id: str, request: Request,
+                                     turn_id: str = Query(..., min_length=1, max_length=128),
+                                     after_sequence: int = Query(0, ge=0)):
+    if not re.fullmatch(r"[a-f0-9]{32}", conversation_id):
+        raise EventStreamNotFound()
+    last_id = request.headers.get("last-event-id")
+    if last_id is not None:
+        if not re.fullmatch(r"[0-9]{1,12}", last_id):
+            raise HTTPException(status_code=400, detail="Invalid event cursor.")
+        after_sequence = max(after_sequence, int(last_id))
+    context = request.state.request_context
+    events_repo = get_event_repository()
+    conversation_repo = get_conversation_repository()
+    async with _CONNECTOR_REPLY_LOCK:
+        await asyncio.to_thread(_redact_unavailable_connector_history, context)
+        await asyncio.to_thread(events_repo.replay, context["workspace_id"], context["principal_id"],
+                                conversation_id, turn_id=turn_id, after_sequence=after_sequence, limit=1)
+
+    async def generate():
+        cursor = after_sequence
+        deadline = time.monotonic() + 30
+        last_heartbeat = time.monotonic()
+        sent = 0
+        while time.monotonic() < deadline and sent < 500:
+            if await request.is_disconnected():
+                break
+            try:
+                async with _CONNECTOR_REPLY_LOCK:
+                    await asyncio.to_thread(_redact_unavailable_connector_history, context)
+                    batch = await asyncio.to_thread(events_repo.replay,
+                        context["workspace_id"], context["principal_id"], conversation_id,
+                        turn_id=turn_id, after_sequence=cursor, limit=100)
+                    status = await asyncio.to_thread(conversation_repo.turn_status,
+                        context["workspace_id"], context["principal_id"], conversation_id, turn_id)
+            except (EventStreamNotFound, ConversationNotFound):
+                break
+            for event in batch:
+                cursor = event["sequence"]
+                sent += 1
+                encoded = json.dumps(event, ensure_ascii=False, separators=(",", ":"))
+                yield f'id: {cursor}\nevent: {event["event_type"]}\ndata: {encoded}\n\n'
+            if status in ("complete", "failed", "cancelled") and not batch:
+                break
+            if not batch and time.monotonic() - last_heartbeat >= 5:
+                yield ": heartbeat\n\n"
+                last_heartbeat = time.monotonic()
+            if not batch:
+                await asyncio.sleep(0.25)
+        # A reconnect continues from the last delivered sequence.
+
+    return StreamingResponse(generate(), media_type="text/event-stream",
+        headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"})
+
+
+@app.delete("/api/conversations/{conversation_id}/turns/{turn_id}")
+async def stop_chat_turn(conversation_id: str, turn_id: str, request: Request):
+    context = request.state.request_context
+    return await asyncio.to_thread(get_event_repository().request_cancel,
+        context["workspace_id"], context["principal_id"], conversation_id, turn_id)
 
 
 @app.delete("/api/conversations/{conversation_id}")
