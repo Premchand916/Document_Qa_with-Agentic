@@ -28,8 +28,9 @@ This is the compact restart checkpoint. At the start of every build task, read t
 - Reusable `build-application-safely` skill v1.1: risk mapping, vertical slices, failure recovery, layered verification, truthful evidence boundaries, durable handoff, and canonical `resources/development-checklist.md`.
 - Step 22: managed-folder connector to chat with explicit publish, isolated principal/source FAISS indexes, read-time composition with local uploads, snapshot provenance and citations, ACL/freshness/epoch checks, revocation cleanup, and stored-answer/event redaction.
 - Step 22 focused connector suite: 12 tests pass, including reupload composition, empty/failed publication, owner isolation, and ACL revocation.
+- UI follow-up: higher-contrast chat shell; source-aware starter prompts; managed-source-first Knowledge Sources dialog with visible error/status states; connector provenance labels; keyboard composer newline; modal focus handling; mobile panel backdrop and responsive source form. Local-file import remains under a secondary disclosure.
 - Current full baseline: 231 tests and all seven stages pass.
-- Local API smoke: `/api/skills` and `/api/prompt-library` return 200 with locked skill metadata. Browser automation host was unavailable; static UI checks pass.
+- Local API smoke: `/api/skills` and `/api/prompt-library` return 200 with locked skill metadata. Chrome UI checked at desktop and 393px mobile width; starter focus, multiline composer, modal open/Escape return, mobile navigation, and inline connector validation error observed.
 
 ## Current files
 
@@ -52,6 +53,7 @@ This is the compact restart checkpoint. At the start of every build task, read t
 - Managed-folder publication is synchronous; there is no remote SaaS connector, OAuth/vault integration, background connector scheduler, plugin/MCP call, shell execution, coding sandbox, or subagent yet.
 - Skills are repository-local UTF-8 guidance only. Remote installation, executable scripts, and automatic production routing are intentionally disabled.
 - SQLite/local mode is not multi-host production infrastructure.
+- UI validation used local managed-folder configuration and a deliberately invalid source key; live model-response quality and real remote connector behavior were not part of this visual pass.
 
 ## Exact next action
 

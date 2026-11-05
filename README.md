@@ -22,7 +22,7 @@ This system enables users to upload documents (PDF, PPT, Excel, CSV, JSON, etc.)
 - 🧠 Bounded working memory, explicit semantic memory, and verified episodic feedback
 - 🛡️ Versioned code/operator-owned procedural guidance; no self-modifying procedures
 - 💬 Chat-first interface with durable conversations and source-free general chat
-- ▱ Separate workspace Knowledge Sources manager for SOP/SOW ingestion
+- ▱ Responsive Knowledge Sources manager with managed-source publication, status, and visible errors
 - 🧩 [Capability-platform architecture and Steps 20–31 roadmap](docs/CHATGPT_CAPABILITY_REVERSE_ENGINEERING.md)
 - 🔬 [Source evidence and architecture uncertainty ledger](docs/CHATGPT_SYSTEM_EVIDENCE_LEDGER.md)
 - 🧱 Capability registry, policy filter, durable turn events, cancellation state, and authorized replay

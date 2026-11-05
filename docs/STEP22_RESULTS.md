@@ -66,4 +66,10 @@ Full baseline: 231 tests and all seven stages pass. Focused connector suite: 12 
 
 ## Remaining boundaries
 
-This local slice has no external SaaS or OAuth provider, vault, background scheduler, incremental provider API, or live read. Publication is synchronous and bounded by the adapter's file limits, but it is not a queued background job. SQLite and the in-process reply lock are single-host assumptions; multi-host deployment requires coordinated storage and revocation. Connector search scores assume compatible embeddings across the local and connector indexes. Real-device browser checks remain outstanding. Fine-tuning remains paused.
+This local slice has no external SaaS or OAuth provider, vault, background scheduler, incremental provider API, or live read. Publication is synchronous and bounded by the adapter's file limits, but it is not a queued background job. SQLite and the in-process reply lock are single-host assumptions; multi-host deployment requires coordinated storage and revocation. Connector search scores assume compatible embeddings across the local and connector indexes. Physical mobile-device checks remain outstanding. Fine-tuning remains paused.
+
+## UI follow-up — 5 November 2026
+
+The chat UI now offers general prompts when no source is connected and grounded prompts after knowledge appears. Managed sources are the primary Knowledge Sources path; local-file import sits behind a secondary disclosure. Source publication states have readable labels, connector evidence carries a managed-source label, and connector failures appear inside the dialog. Composer Enter sends while Shift+Enter inserts a newline. Contrast, focus indicators, reduced-motion behavior, and the mobile side-panel backdrop were improved.
+
+Chrome checks covered desktop and 393px responsive layouts, starter-to-composer focus, multiline entry, dialog focus/Escape return, mobile navigation, and a safe 422 error shown inside the dialog. The check used an invalid synthetic source key and did not publish real data or call a model.

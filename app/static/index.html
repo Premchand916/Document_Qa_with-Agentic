@@ -18,7 +18,7 @@
   --bg:#020810;--bg1:#040D1A;--bg2:#071120;
   --surf:rgba(7,17,32,.88);--surf2:rgba(255,255,255,.04);--surf3:rgba(255,255,255,.07);
   --border:rgba(255,255,255,.07);--border2:rgba(0,212,255,.16);
-  --txt:#E2E8F0;--txt2:#8B9EC7;--muted:#475569;
+  --txt:#F1F5F9;--txt2:#B7C7DD;--muted:#94A3B8;
   --cyan:#00D4FF;--violet:#8B5CF6;--amber:#F6B44C;--green:#00E5A0;--red:#EF4444;
   --glow-c:0 0 22px rgba(0,212,255,.18),0 0 70px rgba(0,212,255,.06);
   --glow-v:0 0 22px rgba(139,92,246,.18),0 0 70px rgba(139,92,246,.06);
@@ -27,6 +27,8 @@
 }
 html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--txt);font-family:var(--f);font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased}
 [x-cloak]{display:none!important}
+.skip-link{position:absolute;top:-60px;left:12px;z-index:900;background:#10283b;color:var(--txt);padding:9px 14px;border-radius:8px;text-decoration:none}
+.skip-link:focus{top:10px}
 
 /* ── Aurora background ──────────────────────────────────────────────── */
 .aurora{position:fixed;inset:0;pointer-events:none;z-index:0;overflow:hidden}
@@ -406,6 +408,49 @@ body{display:flex;flex-direction:column;position:relative;z-index:1}
 .knowledge-note{font-size:11px;color:var(--muted);line-height:1.5;margin-top:14px}
 .modal-indexing{display:flex;align-items:center;gap:9px;padding:10px 12px;border-radius:10px;background:rgba(0,212,255,.06);color:var(--cyan);font-size:12px;margin-bottom:12px}
 
+/* ── UI clarity and connector workflow ─────────────────────────────── */
+.aurora{opacity:.48}
+.workspace::before{display:none}
+.chat-head{background:rgba(7,16,30,.92)}
+.starter-card{background:#101b2a;border-color:rgba(177,204,232,.17);min-height:86px}
+.starter-card:hover{transform:translateY(-2px);border-color:rgba(0,212,255,.48);background:#16283a}
+.starter-card:active{transform:translateY(0)}
+.starter-card strong{font-size:14px}
+.starter-card span{font-size:12.5px}
+.empty-sub{color:var(--txt2)}
+.sidebar-empty,.knowledge-empty{color:var(--txt2)}
+.conversation-delete:focus-visible{display:block}
+.inp-wrap{border-color:rgba(177,204,232,.22)}
+.inp::placeholder{color:#9FB0C5}
+.composer-foot{color:var(--txt2)}
+.knowledge-head p,.knowledge-add span,.knowledge-note{color:var(--txt2)}
+.knowledge-modal{background:#0d1828;border-color:rgba(177,204,232,.2)}
+.knowledge-add{background:#111e2e;border-color:rgba(177,204,232,.18)}
+.knowledge-fields{display:grid;grid-template-columns:1fr 1fr auto;gap:8px;align-items:center;width:100%;margin-top:10px}
+.knowledge-fields input{min-width:0;width:100%;padding:10px 11px;border:1px solid rgba(177,204,232,.25);border-radius:10px;background:#071220;color:var(--txt);font:inherit;font-size:13px}
+.knowledge-fields input::placeholder{color:#9FB0C5}
+.knowledge-fields .knowledge-upload{height:40px}
+.knowledge-primary{display:block}
+.knowledge-primary strong{font-size:14px}
+.knowledge-secondary{border-top:1px solid var(--border);padding-top:15px;margin-top:18px}
+.knowledge-secondary summary{cursor:pointer;color:var(--txt2);font-size:12px;font-weight:600;padding:7px 0}
+.knowledge-secondary .knowledge-add{margin:10px 0 0}
+.knowledge-error{padding:10px 12px;margin:0 0 12px;border:1px solid rgba(239,68,68,.4);border-radius:10px;background:rgba(239,68,68,.12);color:#FECACA;font-size:12.5px}
+.knowledge-source{flex-wrap:wrap;background:#101c2b;border-color:rgba(177,204,232,.17)}
+.knowledge-source-name{font-weight:600}
+.knowledge-source-type{font-size:11px;letter-spacing:0;text-transform:none;border:1px solid var(--border);border-radius:999px;padding:3px 8px;color:var(--txt2)}
+.knowledge-source-type.ready{color:#81E6BE;border-color:rgba(129,230,190,.35);background:rgba(129,230,190,.08)}
+.knowledge-source-type.attention{color:#F9CB80;border-color:rgba(249,203,128,.35);background:rgba(249,203,128,.08)}
+.knowledge-source-actions{display:flex;flex-wrap:wrap;gap:7px;width:100%;justify-content:flex-end;border-top:1px solid var(--border);padding-top:9px}
+.source-action{border:1px solid rgba(177,204,232,.25);border-radius:8px;background:#19283a;color:var(--txt);padding:6px 10px;font:inherit;font-size:11.5px;cursor:pointer}
+.source-action:hover:not(:disabled){background:#22364c;border-color:rgba(177,204,232,.5)}
+.source-action.danger{color:#FDA4AF;border-color:rgba(253,164,175,.25);background:transparent}
+.source-action:disabled{opacity:.4;cursor:not-allowed}
+.source-origin{display:inline-block;margin-right:7px;color:#82D6EB;font-size:11px;font-weight:700}
+.panel-backdrop{display:none}
+button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible,summary:focus-visible{outline:2px solid #77DBF1;outline-offset:2px}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important;scroll-behavior:auto!important}}
+
 @media (max-width:900px){
   .mobile-menu{display:inline-flex}
   .logo{gap:7px}
@@ -415,6 +460,7 @@ body{display:flex;flex-direction:column;position:relative;z-index:1}
   .panel-c{height:calc(100vh - 56px);min-height:0}
   .panel-r.open{top:56px;width:min(360px,100vw)}
   .chat-head{padding:0 13px}
+  .panel-backdrop{display:block;position:fixed;inset:56px 0 0;z-index:405;background:rgba(0,0,0,.55);border:0;width:100%;cursor:pointer}
 }
 @media (max-width:600px){
   html,body{height:100%;min-height:0;overflow:hidden}
@@ -434,11 +480,16 @@ body{display:flex;flex-direction:column;position:relative;z-index:1}
   .composer-tools{left:10px;bottom:72px}
   .knowledge-add{align-items:flex-start;flex-direction:column}
   .knowledge-upload{width:100%}
+  .knowledge-fields{grid-template-columns:1fr}
+  .knowledge-fields .knowledge-upload{width:100%}
+  .knowledge-source-actions{justify-content:flex-start}
+  .knowledge-modal{max-height:calc(100dvh - 24px)}
 }
 </style>
 </head>
 
 <body x-data="nexus()" x-cloak>
+<a class="skip-link" href="#chat-main">Skip to chat</a>
 
 <!-- Aurora background -->
 <div class="aurora" aria-hidden="true">
@@ -464,6 +515,7 @@ body{display:flex;flex-direction:column;position:relative;z-index:1}
 
 <!-- ══ Workspace ══════════════════════════════════════════════════════════ -->
 <div class="workspace">
+  <button class="panel-backdrop" type="button" aria-label="Close side panel" x-show="navOpen||studioOpen" @click="navOpen=false;studioOpen=false"></button>
 
   <!-- ── LEFT: Navigation ───────────────────────────────────────────────── -->
   <aside class="panel panel-l" :class="{open:navOpen}">
@@ -477,7 +529,7 @@ body{display:flex;flex-direction:column;position:relative;z-index:1}
     </div>
 
     <nav class="sidebar-nav" aria-label="Workspace navigation">
-      <button class="nav-button" type="button" @click="knowledgeOpen=true;navOpen=false">
+      <button class="nav-button" type="button" @click="openKnowledge();navOpen=false">
         <span>▱</span><span>Knowledge Sources</span><span class="nav-count" x-text="files.length"></span>
       </button>
       <button class="nav-button" type="button" :class="{active:cfg.web}" @click="cfg.web=!cfg.web">
@@ -517,14 +569,14 @@ body{display:flex;flex-direction:column;position:relative;z-index:1}
   </aside>
 
   <!-- ── CENTER: Chat ───────────────────────────────────────────────────── -->
-  <main class="panel panel-c">
+  <main class="panel panel-c" id="chat-main">
     <div class="chat-head">
       <div class="chat-title-wrap">
         <div class="chat-kicker" x-text="workspaceId||'Workspace'"></div>
         <div class="chat-title" x-text="currentConversationTitle"></div>
       </div>
       <div class="chat-actions">
-        <button class="icon-button" type="button" @click="knowledgeOpen=true"><span>Knowledge</span> <b x-text="files.length"></b></button>
+        <button class="icon-button" type="button" @click="openKnowledge()"><span>Knowledge</span> <b x-text="files.length"></b></button>
         <button class="icon-button studio-toggle" type="button" :aria-expanded="studioOpen" aria-controls="studio-panel" @click="studioOpen=!studioOpen"><span>Memory</span> ◇</button>
       </div>
     </div>
@@ -535,12 +587,18 @@ body{display:flex;flex-direction:column;position:relative;z-index:1}
       <div class="empty" x-show="chatHistory.length===0&&!loading">
         <div class="empty-hex">⬡</div>
         <div class="empty-title">How can I help?</div>
-        <div class="empty-sub">Chat normally, search current web information, or ask grounded questions across connected SOP and SOW knowledge.</div>
-        <div class="starter-grid">
-          <button class="starter-card" type="button" @click="txt='Summarize the key obligations across our connected SOW documents.'"><strong>Summarize obligations</strong><span>Find deliverables, owners, and dates across SOWs.</span></button>
-          <button class="starter-card" type="button" @click="txt='Compare the connected SOP documents and identify conflicting procedures.'"><strong>Compare procedures</strong><span>Surface conflicts and cite supporting SOP sections.</span></button>
-          <button class="starter-card" type="button" @click="txt='Create an action plan from the relevant SOP and SOW requirements.'"><strong>Create an action plan</strong><span>Turn grounded requirements into clear next steps.</span></button>
-          <button class="starter-card" type="button" @click="cfg.web=true;txt='Research the latest information and cite current web sources.'"><strong>Research the web</strong><span>Enable current web evidence for this conversation.</span></button>
+        <div class="empty-sub" x-text="files.length?'Ask grounded questions across your connected knowledge, or work through a new idea.':'Start a conversation, or connect a managed knowledge source for cited answers.'"></div>
+        <div class="starter-grid" x-show="!files.length">
+          <button class="starter-card" type="button" @click="useStarter('Help me think through a problem step by step.')"><strong>Think through a problem</strong><span>Explore options and tradeoffs together.</span></button>
+          <button class="starter-card" type="button" @click="useStarter('Help me draft a clear message.')"><strong>Draft something</strong><span>Start with an outline, then refine it.</span></button>
+          <button class="starter-card" type="button" @click="openKnowledge()"><strong>Connect knowledge</strong><span>Bring managed SOP and SOW sources into chat.</span></button>
+          <button class="starter-card" type="button" @click="useStarter('Research the latest information and cite current web sources.',true)"><strong>Research the web</strong><span>Use current web evidence for an answer.</span></button>
+        </div>
+        <div class="starter-grid" x-show="files.length">
+          <button class="starter-card" type="button" @click="useStarter('Summarize the key obligations across our connected SOW documents.')"><strong>Summarize obligations</strong><span>Find deliverables, owners, and dates across SOWs.</span></button>
+          <button class="starter-card" type="button" @click="useStarter('Compare the connected SOP documents and identify conflicting procedures.')"><strong>Compare procedures</strong><span>Surface conflicts and cite supporting SOP sections.</span></button>
+          <button class="starter-card" type="button" @click="useStarter('Create an action plan from the relevant SOP and SOW requirements.')"><strong>Create an action plan</strong><span>Turn grounded requirements into next steps.</span></button>
+          <button class="starter-card" type="button" @click="useStarter('Research the latest information and cite current web sources.',true)"><strong>Research the web</strong><span>Add current web evidence to this conversation.</span></button>
         </div>
       </div>
 
@@ -562,7 +620,7 @@ body{display:flex;flex-direction:column;position:relative;z-index:1}
                 <div class="src-list">
                   <template x-for="(c,ci) in m.cards.filter(c=>!c.web)" :key="ci">
                     <div class="src-card">
-                      <button class="src-btn" @click="toggleSrc(i,ci)" x-text="c.title"></button>
+                      <button class="src-btn" type="button" :aria-expanded="srcKey===i+'_'+ci" @click="toggleSrc(i,ci)"><span class="source-origin" x-text="c.origin==='connector'?'MANAGED':'LOCAL'"></span><span x-text="c.title"></span></button>
                       <div class="src-summ" x-text="c.summ"></div>
                       <div class="src-excerpt" x-show="srcKey===i+'_'+ci" x-html="hi(c.excerpt,m.q)"></div>
                     </div>
@@ -617,7 +675,7 @@ body{display:flex;flex-direction:column;position:relative;z-index:1}
     <!-- Input -->
     <div class="inp-area">
       <div class="composer-tools" x-show="toolsOpen" x-transition @click.outside="toolsOpen=false">
-        <button class="tool-action" type="button" @click="knowledgeOpen=true;toolsOpen=false"><b>▱</b><span>Manage knowledge sources</span><span x-text="files.length+' connected'"></span></button>
+        <button class="tool-action" type="button" @click="openKnowledge();toolsOpen=false"><b>▱</b><span>Manage knowledge sources</span><span x-text="files.length+' connected'"></span></button>
         <button class="tool-action" type="button" @click="cfg.web=!cfg.web"><b>◎</b><span>Search the web</span><span x-text="cfg.web?'On':'Off'"></span></button>
         <button class="tool-action" type="button" @click="libOpen=!libOpen"><b>✦</b><span>Prompt library</span><span x-text="libOpen?'Hide':'Browse'"></span></button>
         <div class="tool-prompt-library" x-show="libOpen">
@@ -637,10 +695,10 @@ body{display:flex;flex-direction:column;position:relative;z-index:1}
       </div>
       <div class="inp-wrap">
         <button class="composer-add" :class="{on:toolsOpen}" type="button" aria-label="Open tools" :aria-expanded="toolsOpen" @click="toolsOpen=!toolsOpen">＋</button>
-        <textarea class="inp" id="inp" rows="1"
+        <textarea class="inp" id="inp" rows="1" aria-label="Message Nexus"
           placeholder="Message Nexus"
           x-model="txt"
-          @keydown.enter.prevent="if(!$event.shiftKey)send(txt)"
+          @keydown.enter="onComposerEnter($event)"
           @input="resize($event);selectedSkill=''"
           :disabled="busy"></textarea>
         <button class="send" aria-label="Send question" @click="send(txt)" :disabled="busy||!txt.trim()">
@@ -649,7 +707,7 @@ body{display:flex;flex-direction:column;position:relative;z-index:1}
           </svg>
         </button>
       </div>
-      <div class="composer-foot"><span x-text="cfg.provider==='ollama'?'Local Ollama':'Gemini'"></span><span>·</span><span x-text="cfg.web?'Web on':(files.length?files.length+' knowledge source'+(files.length===1?'':'s'):'General chat')"></span><span>·</span><span>Verify important cited information.</span></div>
+      <div class="composer-foot"><span x-text="cfg.provider==='ollama'?'Local Ollama':'Gemini'"></span><span>·</span><span x-text="cfg.web?'Web on':(files.length?files.length+' knowledge source'+(files.length===1?'':'s'):'General chat')"></span><span>·</span><span>Enter to send · Shift+Enter for a new line</span></div>
     </div>
   </main>
 
@@ -761,24 +819,19 @@ body{display:flex;flex-direction:column;position:relative;z-index:1}
 </div><!-- /workspace -->
 
 <!-- Knowledge ingestion is separate from chat; no drag/drop surface in conversations. -->
-<div class="knowledge-backdrop" x-show="knowledgeOpen" x-transition.opacity @click.self="knowledgeOpen=false" @keydown.escape.window="knowledgeOpen=false">
-  <section class="knowledge-modal" role="dialog" aria-modal="true" aria-labelledby="knowledge-title">
+<div class="knowledge-backdrop" x-show="knowledgeOpen" x-transition.opacity @click.self="closeKnowledge()" @keydown.escape.window="if(knowledgeOpen)closeKnowledge()">
+  <section class="knowledge-modal" role="dialog" aria-modal="true" aria-labelledby="knowledge-title" x-ref="knowledgeDialog" @keydown.tab="trapKnowledgeFocus($event)">
     <div class="knowledge-head">
       <div>
         <h2 id="knowledge-title">Knowledge Sources</h2>
         <p>Manage SOPs, SOWs, policies, and data sources. Managed sources appear in your chats when your access is active.</p>
       </div>
-      <button class="modal-close" type="button" aria-label="Close knowledge sources" @click="knowledgeOpen=false">×</button>
+      <button class="modal-close" type="button" aria-label="Close knowledge sources" x-ref="knowledgeClose" @click="closeKnowledge()">×</button>
     </div>
     <div class="knowledge-body">
       <input type="file" id="knowledge-file-input" multiple hidden
              accept=".pdf,.pptx,.xlsx,.xlsm,.csv,.tsv,.txt,.md,.json,.jpg,.jpeg,.png,.tiff,.tif,.bmp,.webp"
              @change="onFileInput($event);$event.target.value=''">
-      <div class="knowledge-add">
-        <div><strong>Add workspace knowledge</strong><span>PDF, PPTX, spreadsheets, text, JSON, and OCR images. New ingestion replaces current local corpus.</span></div>
-        <button class="knowledge-upload" type="button" :disabled="busy||indexing" @click="document.getElementById('knowledge-file-input').click()">Choose files</button>
-      </div>
-
       <div class="modal-indexing" x-show="indexing">
         <div class="spin"></div><span x-text="ingestionStage"></span>
         <button type="button" class="cancel-job" x-show="ingestionJob" @click="cancelIngestion()">Cancel</button>
@@ -786,32 +839,33 @@ body{display:flex;flex-direction:column;position:relative;z-index:1}
       <div class="warn" role="status" x-show="uploadWarnings.length" x-text="uploadWarnings.join(' ')" aria-live="polite"></div>
 
       <div class="sidebar-section-label" style="padding-left:0">Managed knowledge</div>
-      <div class="knowledge-add" x-show="connectorConfigured">
-        <div><strong>Connect a managed folder</strong><span>Enter a source key supplied by your administrator.</span></div>
-        <div style="display:flex;flex-direction:column;gap:7px;min-width:180px">
-          <input type="text" aria-label="Managed source key" placeholder="operations/sop" maxlength="320" x-model="connectorKey">
-          <input type="text" aria-label="Managed source name" placeholder="Source name" maxlength="120" x-model="connectorName">
-          <button class="knowledge-upload" type="button" :disabled="!!connectorBusy||!connectorKey.trim()||!connectorName.trim()" @click="connectManagedSource()">Connect</button>
+      <div class="knowledge-add knowledge-primary" x-show="connectorConfigured">
+        <div><strong>Connect a managed source</strong><span>Use the source key supplied by your administrator. Connecting syncs and publishes the source for chat.</span></div>
+        <div class="knowledge-fields">
+          <input id="managed-source-key" type="text" aria-label="Managed source key" placeholder="Source key, e.g. operations/sop" maxlength="320" x-model="connectorKey">
+          <input type="text" aria-label="Managed source name" placeholder="Display name" maxlength="120" x-model="connectorName">
+          <button class="knowledge-upload" type="button" :disabled="!!connectorBusy||!connectorKey.trim()||!connectorName.trim()" @click="connectManagedSource()">Connect &amp; publish</button>
         </div>
       </div>
       <div class="knowledge-note" x-show="!connectorConfigured">Managed folders require server configuration.</div>
       <div class="knowledge-note" role="status" aria-live="polite" x-show="connectorBusy" x-text="connectorStatus"></div>
+      <div class="knowledge-error" role="alert" x-show="connectorError" x-text="connectorError"></div>
       <div class="knowledge-list" x-show="connectorSources.length">
         <template x-for="source in connectorSources" :key="source.source_id">
-          <div class="knowledge-source" style="flex-wrap:wrap">
+          <div class="knowledge-source">
             <span class="f-ico">▱</span>
             <span class="knowledge-source-name" x-text="source.display_name"></span>
-            <span class="knowledge-source-type" x-text="source.publication_state+' · '+source.freshness"></span>
-            <div style="display:flex;gap:6px;width:100%;justify-content:flex-end">
-              <button type="button" :disabled="!!connectorBusy||source.state!=='active'||source.grant_state!=='active'" @click="syncManagedSource(source)">Sync &amp; publish</button>
-              <button type="button" :disabled="!!connectorBusy||source.state!=='active'||source.grant_state!=='active'" @click="revokeManagedSource(source)">Revoke</button>
-              <button type="button" :disabled="!!connectorBusy" @click="deleteManagedSource(source)">Delete</button>
+            <span class="knowledge-source-type" :class="sourceStatusClass(source)" x-text="sourceStatus(source)"></span>
+            <div class="knowledge-source-actions">
+              <button class="source-action" type="button" :disabled="!!connectorBusy||source.state!=='active'||source.grant_state!=='active'" @click="syncManagedSource(source)">Sync &amp; publish</button>
+              <button class="source-action" type="button" :disabled="!!connectorBusy||source.state!=='active'||source.grant_state!=='active'" @click="revokeManagedSource(source)">Revoke</button>
+              <button class="source-action danger" type="button" :disabled="!!connectorBusy" @click="deleteManagedSource(source)">Delete</button>
             </div>
           </div>
         </template>
       </div>
 
-      <div class="sidebar-section-label" style="padding-left:0">Connected sources</div>
+      <div class="sidebar-section-label" style="padding-left:0">Available in chat</div>
       <div class="knowledge-list" x-show="files.length">
         <template x-for="f in files" :key="f.name">
           <div class="knowledge-source"><span class="f-ico" x-text="fIcon(f.ext)"></span><span class="knowledge-source-name" x-text="f.name"></span><span class="knowledge-source-type" x-text="f.ext"></span></div>
@@ -819,6 +873,13 @@ body{display:flex;flex-direction:column;position:relative;z-index:1}
       </div>
       <div class="knowledge-empty" x-show="!files.length&&!indexing">No workspace knowledge connected yet. General chat remains available.</div>
       <div class="knowledge-note">Managed folders are read-only. Published snapshots join your chats after sync; stale and revoked sources are excluded.</div>
+      <details class="knowledge-secondary">
+        <summary>Import local files</summary>
+        <div class="knowledge-add">
+          <div><strong>Replace local knowledge</strong><span>PDF, PPTX, spreadsheets, text, JSON, and OCR images. A new import replaces only the current local corpus.</span></div>
+          <button class="knowledge-upload" type="button" :disabled="busy||indexing" @click="document.getElementById('knowledge-file-input').click()">Choose files</button>
+        </div>
+      </details>
     </div>
   </section>
 </div>
@@ -829,7 +890,7 @@ function nexus() {
     // ── State ─────────────────────────────────────────────────────────────
     workspaceId: "", workspaces: [], canSelectWorkspace: false, canReview: false, switching: true, providerChanging: false,
     files: [], indexing: false, uploadWarnings: [], ingestionJob: null, ingestionStage: 'Indexing knowledge…',
-    connectorSources: [], connectorConfigured: false, connectorKey: '', connectorName: '', connectorBusy: '', connectorStatus: '',
+    connectorSources: [], connectorConfigured: false, connectorKey: '', connectorName: '', connectorBusy: '', connectorStatus: '', connectorError: '', knowledgeTrigger: null,
     chatHistory: [], conversations: [], conversationId: '', conversationNextBefore: null, pendingSubmission: null, corpusVersion: null, txt: '', loading: false,
     srcKey: null,
     notes: [], memories: [], reviewQueue: [], lastRes: null, feedbackStatus: '', memoryStatus: '',
@@ -857,6 +918,55 @@ function nexus() {
     },
 
     get busy() { return this.loading || this.switching || this.providerChanging; },
+    useStarter(prompt, enableWeb=false) {
+      this.txt=prompt;
+      if(enableWeb) this.cfg.web=true;
+      this.$nextTick(()=>document.getElementById('inp')?.focus());
+    },
+    onComposerEnter(event) {
+      if(event.shiftKey || event.isComposing) return;
+      event.preventDefault();
+      this.send(this.txt);
+    },
+    openKnowledge() {
+      this.knowledgeTrigger=document.activeElement;
+      this.connectorError='';
+      this.knowledgeOpen=true;
+      this.$nextTick(()=>(this.connectorConfigured
+        ? document.getElementById('managed-source-key') : this.$refs.knowledgeClose)?.focus());
+    },
+    closeKnowledge() {
+      this.knowledgeOpen=false;
+      const trigger=this.knowledgeTrigger;
+      this.knowledgeTrigger=null;
+      this.$nextTick(()=>trigger?.focus?.());
+    },
+    trapKnowledgeFocus(event) {
+      const elements=[...this.$refs.knowledgeDialog.querySelectorAll('button:not([disabled]),input:not([disabled]),summary')]
+        .filter(element=>element.getClientRects().length>0);
+      if(!elements.length) return;
+      const first=elements[0], last=elements[elements.length-1];
+      if(event.shiftKey && document.activeElement===first) {event.preventDefault();last.focus();}
+      else if(!event.shiftKey && document.activeElement===last) {event.preventDefault();first.focus();}
+    },
+    sourceStatus(source) {
+      if(source.state!=='active'||source.grant_state!=='active') return 'Revoked';
+      if(source.freshness==='stale') return 'Stale · sync needed';
+      if(source.publication_state==='ready'&&source.published_file_count===0) return 'Published · empty source';
+      if(source.publication_state==='ready') return 'Ready for chat';
+      if(source.publication_state==='needs_publish') return 'Needs publish for chat';
+      return 'Not synced';
+    },
+    sourceStatusClass(source) {
+      if(source.state!=='active'||source.grant_state!=='active') return '';
+      return source.freshness==='fresh'&&source.publication_state==='ready'
+        &&source.published_file_count>0?'ready':'attention';
+    },
+    async connectorFailure(error) {
+      this.connectorError=error?.message||'Could not update knowledge sources.';
+      try { await this.refreshConnectorSources(); }
+      catch(refreshError) { this.connectorError+=' '+refreshError.message; }
+    },
     apiFetch(url, options={}) {
       const headers = new Headers(options.headers || {});
       if (this.canSelectWorkspace && this.workspaceId) headers.set('X-Workspace-ID', this.workspaceId);
@@ -944,7 +1054,7 @@ function nexus() {
       await this.refreshConversations();
     },
     newConversation() {
-      this.conversationId=''; this.conversationNextBefore=null; this.pendingSubmission=null; this.chatHistory=[]; this.lastRes=null; this.feedbackStatus=''; this.srcKey=null; this.err=null; this.toolsOpen=false; this.selectedSkill='';
+      this.conversationId=''; this.conversationNextBefore=null; this.pendingSubmission=null; this.chatHistory=[]; this.lastRes=null; this.feedbackStatus=''; this.srcKey=null; this.err=null; this.toolsOpen=false; this.selectedSkill=''; this.txt='';
     },
     async switchWorkspace(workspace) {
       if (this.busy || workspace === this.workspaceId || !this.workspaces.includes(workspace)) return;
@@ -952,7 +1062,7 @@ function nexus() {
       this.workspaceId=workspace;
       this.chatHistory=[]; this.conversationId=''; this.conversationNextBefore=null; this.pendingSubmission=null; this.conversations=[]; this.notes=[]; this.memories=[]; this.reviewQueue=[]; this.lastRes=null; this.feedbackStatus=''; this.memoryStatus=''; this.srcKey=null;
       this.txt=''; this.files=[]; this.questions=[]; this.err=null; this.uploadWarnings=[]; this.selectedSkill='';
-      this.connectorSources=[]; this.connectorConfigured=false; this.connectorKey=''; this.connectorName=''; this.connectorBusy=''; this.connectorStatus='';
+      this.connectorSources=[]; this.connectorConfigured=false; this.connectorKey=''; this.connectorName=''; this.connectorBusy=''; this.connectorStatus=''; this.connectorError='';
       this.statusReady=false; this.statusText='Loading workspace'; this.knowledgeOpen=false; this.toolsOpen=false; this.navOpen=false;
       try {
         const access=await this.apiFetch('/api/workspaces');
@@ -999,7 +1109,7 @@ function nexus() {
     },
     async connectManagedSource() {
       if(this.connectorBusy||!this.connectorKey.trim()||!this.connectorName.trim()) return;
-      this.connectorBusy='register'; this.connectorStatus='Connecting managed source…'; this.err=null;
+      this.connectorBusy='register'; this.connectorStatus='Connecting managed source…'; this.connectorError='';
       try {
         const key=globalThis.crypto?.randomUUID?.()||`${Date.now()}-${Math.random().toString(16).slice(2)}`;
         const r=await this.apiFetch('/api/connectors/sources',{method:'POST',
@@ -1009,11 +1119,11 @@ function nexus() {
         const source=(await r.json()).source;
         this.connectorKey=''; this.connectorName=''; this.connectorBusy='';
         await this.syncManagedSource(source);
-      } catch(e) { this.err=e.message; this.connectorBusy=''; this.connectorStatus=''; await this.refreshConnectorSources(); }
+      } catch(e) { this.connectorBusy=''; this.connectorStatus=''; await this.connectorFailure(e); }
     },
     async syncManagedSource(source) {
       if(this.connectorBusy) return;
-      this.connectorBusy=source.source_id; this.connectorStatus='Syncing managed source…'; this.err=null;
+      this.connectorBusy=source.source_id; this.connectorStatus='Syncing managed source…'; this.connectorError='';
       try {
         const key=globalThis.crypto?.randomUUID?.()||`${Date.now()}-${Math.random().toString(16).slice(2)}`;
         const sync=await this.apiFetch('/api/connectors/sources/'+encodeURIComponent(source.source_id)+'/sync',
@@ -1023,29 +1133,29 @@ function nexus() {
         const published=await this.apiFetch('/api/connectors/sources/'+encodeURIComponent(source.source_id)+'/publish',{method:'POST'});
         if(!published.ok) throw new Error(await this.apiError(published,'Could not publish source'));
         await this.refreshKnowledgeState();
-      } catch(e) { this.err=e.message; await this.refreshConnectorSources(); }
+      } catch(e) { await this.connectorFailure(e); }
       finally { this.connectorBusy=''; this.connectorStatus=''; }
     },
     async revokeManagedSource(source) {
       if(this.connectorBusy||!globalThis.confirm('Revoke this managed source from chat?')) return;
-      this.connectorBusy=source.source_id; this.connectorStatus='Revoking source…'; this.err=null;
+      this.connectorBusy=source.source_id; this.connectorStatus='Revoking source…'; this.connectorError='';
       try {
         const r=await this.apiFetch('/api/connectors/grants/'+encodeURIComponent(source.grant_id),{method:'DELETE'});
         if(!r.ok) throw new Error(await this.apiError(r,'Could not revoke source'));
         await this.refreshKnowledgeState();
         if(this.conversationId) await this.openConversation(this.conversationId);
-      } catch(e) { this.err=e.message; }
+      } catch(e) { await this.connectorFailure(e); }
       finally { this.connectorBusy=''; this.connectorStatus=''; }
     },
     async deleteManagedSource(source) {
       if(this.connectorBusy||!globalThis.confirm('Delete this managed source and its snapshots permanently?')) return;
-      this.connectorBusy=source.source_id; this.connectorStatus='Deleting source…'; this.err=null;
+      this.connectorBusy=source.source_id; this.connectorStatus='Deleting source…'; this.connectorError='';
       try {
         const r=await this.apiFetch('/api/connectors/sources/'+encodeURIComponent(source.source_id),{method:'DELETE'});
         if(!r.ok) throw new Error(await this.apiError(r,'Could not delete source'));
         await this.refreshKnowledgeState();
         if(this.conversationId) await this.openConversation(this.conversationId);
-      } catch(e) { this.err=e.message; }
+      } catch(e) { await this.connectorFailure(e); }
       finally { this.connectorBusy=''; this.connectorStatus=''; }
     },
 
@@ -1078,7 +1188,7 @@ function nexus() {
         await this.waitForIngestion(jobId);
         this.ingestionJob=null; this.indexing=false;
         await this.loadWorkspace();
-      } catch(e) { this.err=e.message; this.indexing=false; this.ingestionJob=null; }
+      } catch(e) { this.connectorError=e.message; this.err=e.message; this.indexing=false; this.ingestionJob=null; }
     },
     async cancelIngestion() {
       const jobId=this.ingestionJob?.job_id;
@@ -1114,7 +1224,7 @@ function nexus() {
         for(const m of this.chatHistory) if(m.role==='assistant'&&m.corpusVersion&&m.corpusVersion!==this.corpusVersion) m.stale=true;
         this.lastRes=null; this.feedbackStatus=''; this.srcKey=null;
         await this.refreshKnowledgeState();
-      } catch(e){ this.err=e.message; }
+      } catch(e){ this.connectorError=e.message; }
       finally{ this.indexing=false; this.ingestionJob=null; this.ingestionStage='Indexing knowledge…'; }
     },
 
@@ -1192,10 +1302,10 @@ function nexus() {
         const words=txt.split(' ');
         const summ=words.slice(0,20).join(' ')+(words.length>20?'…':'');
         if(md.content_type==='web_result'){
-          out.push({title:md.title||md.source||'Web',summ,excerpt:txt,web:true,url:md.url||'',evidenceId:md.evidence_id||''});
+          out.push({title:md.title||md.source||'Web',summ,excerpt:txt,web:true,url:md.url||'',evidenceId:md.evidence_id||'',origin:'web'});
         } else {
           const loc=md.page&&md.page!=='N/A'?` — ${md.page}`:'';
-          out.push({title:(md.source||'Unknown')+loc,summ,excerpt:txt,web:false,url:'',evidenceId:md.evidence_id||''});
+          out.push({title:(md.source||'Unknown')+loc,summ,excerpt:txt,web:false,url:'',evidenceId:md.evidence_id||'',origin:md.origin||((md.connector_source_id)?'connector':'local')});
         }
       }
       return out;
